@@ -10,8 +10,39 @@ from groq import Groq
 from authlib.integrations.flask_client import OAuth
 import uuid
 
-# Load environment variables from parent directory
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+# Load environment variables from parent directory config files
+def load_config():
+    # Try config.json first
+    json_path = os.path.join(os.path.dirname(__file__), '..', 'config.json')
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                for k, v in config.items():
+                    os.environ[k] = str(v)
+            print("Loaded configuration from config.json")
+            return True
+        except Exception as e:
+            print(f"Error loading config.json: {e}")
+            
+    # Try config.txt next
+    txt_path = os.path.join(os.path.dirname(__file__), '..', 'config.txt')
+    if os.path.exists(txt_path):
+        load_dotenv(txt_path)
+        print("Loaded configuration from config.txt")
+        return True
+
+    # Fallback to .env
+    env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print("Loaded configuration from .env")
+        return True
+        
+    print("Warning: No configuration file found (config.json, config.txt, or .env)")
+    return False
+
+load_config()
 
 app = Flask(__name__, 
             template_folder=os.path.join(os.path.dirname(__file__), '..', 'templates'),
@@ -31,22 +62,8 @@ DB_PATH = os.path.join(os.path.dirname(__file__), 'database', 'aura.db')
 PFP_DIR = os.path.join(os.path.dirname(__file__), '..', 'Uploads', 'Profiles')
 os.makedirs(PFP_DIR, exist_ok=True)
 
-# Run database migrations on startup
-try:
-    from Backend.migrate import migrate
-    migrate()
-except ImportError:
-    try:
-        from migrate import migrate
-        migrate()
-    except Exception as e:
-        print(f"Database migration failed (fallback): {e}")
-except Exception as e:
-    print(f"Database migration failed: {e}")
-
 # ── Database Helpers ──────────────────────────────────────────────────────
 def get_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -1348,5 +1365,4 @@ def stop_chat():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 7000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=7000, debug=True)

@@ -2,11 +2,10 @@ import json
 import sqlite3
 import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'database', 'aura.db')
+DB_PATH = os.path.join('database', 'aura.db')
 
 def migrate():
     # 1. Connect to SQLite
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -90,9 +89,8 @@ def migrate():
     # 3. Load JSON and Insert
     
     # Plans
-    plans_path = os.path.join(os.path.dirname(__file__), 'plans.json')
-    if os.path.exists(plans_path):
-        with open(plans_path, 'r') as f:
+    if os.path.exists('plans.json'):
+        with open('plans.json', 'r') as f:
             plans = json.load(f)
             for name, limits in plans.items():
                 cursor.execute('INSERT OR REPLACE INTO plans VALUES (?, ?, ?, ?)',
@@ -100,9 +98,8 @@ def migrate():
         print("Migrated plans.")
 
     # Codes
-    codes_path = os.path.join(os.path.dirname(__file__), 'codes.json')
-    if os.path.exists(codes_path):
-        with open(codes_path, 'r') as f:
+    if os.path.exists('codes.json'):
+        with open('codes.json', 'r') as f:
             codes = json.load(f)
             for code, data in codes.items():
                 cursor.execute('INSERT OR REPLACE INTO codes VALUES (?, ?, ?, ?)',
@@ -110,9 +107,8 @@ def migrate():
         print("Migrated codes.")
 
     # Users
-    users_path = os.path.join(os.path.dirname(__file__), 'users.json')
-    if os.path.exists(users_path):
-        with open(users_path, 'r') as f:
+    if os.path.exists('users.json'):
+        with open('users.json', 'r') as f:
             users = json.load(f)
             for username, u in users.items():
                 cursor.execute('''
