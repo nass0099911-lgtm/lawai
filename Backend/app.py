@@ -47,7 +47,28 @@ load_config()
 app = Flask(__name__, 
             template_folder=os.path.join(os.path.dirname(__file__), '..', 'templates'),
             static_folder=os.path.join(os.path.dirname(__file__), '..', 'static'))
-app.secret_key = os.urandom(24)
+
+# Persistent secret key so restarts do not log out users
+secret_key_file = os.path.join(os.path.dirname(__file__), '.secret_key')
+if os.path.exists(secret_key_file):
+    try:
+        with open(secret_key_file, 'rb') as f:
+            app.secret_key = f.read()
+    except Exception as e:
+        print(f"Error reading secret key file: {e}")
+        app.secret_key = os.urandom(24)
+else:
+    try:
+        key = os.urandom(24)
+        with open(secret_key_file, 'wb') as f:
+            f.write(key)
+        app.secret_key = key
+    except Exception as e:
+        print(f"Error writing secret key file: {e}")
+        app.secret_key = os.urandom(24)
+
+from datetime import timedelta
+app.permanent_session_lifetime = timedelta(days=365)
 
 oauth = OAuth(app)
 oauth.register(
@@ -184,6 +205,7 @@ def login():
             
             session['user'] = username
             session['is_guest'] = False
+            session.permanent = True
             return redirect(url_for('index'))
             
         u = query_db('SELECT * FROM users WHERE username = ?', (username,), one=True)
@@ -191,6 +213,7 @@ def login():
             old_user = session.get('user')
             session['user'] = username
             session['is_guest'] = False
+            session.permanent = True
             if old_user and old_user.startswith('gestur_') and old_user != username:
                 migrate_guest_chats(old_user, username)
             return redirect(url_for('index'))
@@ -217,6 +240,7 @@ def signup():
         old_user = session.get('user')
         session['user'] = username
         session['is_guest'] = False
+        session.permanent = True
         if old_user and old_user.startswith('gestur_') and old_user != username:
             migrate_guest_chats(old_user, username)
             
@@ -252,6 +276,7 @@ def auth_google_callback():
         session['user'] = email
         session['profile_pic_url'] = picture
         session['is_guest'] = False
+        session.permanent = True
         
         if old_user and old_user.startswith('gestur_') and old_user != email:
             migrate_guest_chats(old_user, email)
@@ -275,6 +300,7 @@ def login_apple():
     session['user'] = email
     session['profile_pic_url'] = picture
     session['is_guest'] = False
+    session.permanent = True
     
     if old_user and old_user.startswith('gestur_') and old_user != email:
         migrate_guest_chats(old_user, email)
@@ -348,6 +374,8 @@ def handle_chats():
     username = session['user']
     
     if request.method == 'GET':
+        if session.get('is_guest'):
+            return jsonify([])
         chats = query_db('SELECT * FROM chats WHERE username = ? ORDER BY updated_at DESC', (username,))
         return jsonify([dict(c) for c in chats])
         
@@ -355,8 +383,10 @@ def handle_chats():
         data = request.json
         chat_id = data.get('chat_id', str(uuid.uuid4()))
         title = data.get('title', 'Nýtt samtal')
+        if session.get('is_guest'):
+            return jsonify({'chat_id': chat_id, 'title': title})
+            
         now = datetime.now().isoformat()
-        
         existing = query_db('SELECT chat_id FROM chats WHERE chat_id = ?', (chat_id,), one=True)
         if existing:
             query_db('UPDATE chats SET title = ?, updated_at = ? WHERE chat_id = ? AND username = ?', 
@@ -369,6 +399,8 @@ def handle_chats():
 @app.route('/api/chats/<chat_id>', methods=['DELETE'])
 def delete_chat(chat_id):
     if 'user' not in session: return jsonify({'error': 'Unauthorized'}), 401
+    if session.get('is_guest'):
+        return jsonify({'success': True})
     username = session['user']
     query_db('DELETE FROM messages WHERE chat_id = ? AND chat_id IN (SELECT chat_id FROM chats WHERE username = ?)', (chat_id, username))
     query_db('DELETE FROM chats WHERE chat_id = ? AND username = ?', (chat_id, username))
@@ -399,6 +431,12 @@ def handle_messages(chat_id):
     if 'user' not in session: return jsonify({'error': 'Unauthorized'}), 401
     username = session['user']
     
+    if session.get('is_guest'):
+        if request.method == 'GET':
+            return jsonify([])
+        if request.method == 'POST':
+            return jsonify({'success': True})
+            
     # Verify ownership
     chat = query_db('SELECT * FROM chats WHERE chat_id = ? AND username = ?', (chat_id, username), one=True)
     if not chat: return jsonify({'error': 'Not found'}), 404
@@ -426,26 +464,15 @@ def handle_messages(chat_id):
         
         # If first user message, generate title and store in db
         if msg_count == 0 and role == 'user':
-            keys = get_gemini_keys()
-            if keys:
-                for k in keys:
-                    try:
-                        client = genai.Client(api_key=k)
-                        response = client.models.generate_content(
-                            model='gemini-3-flash-preview',
-                            contents=f"Draga saman þessi skilaboð í stuttan samtalstitil á íslensku (hámark 3-4 orð). Ekki nota gæsalappir eða greinarmerki: {content}"
-                        )
-                        generated_title = response.text.strip().replace('"', '')[:30]
-                        query_db('UPDATE chats SET title = ? WHERE chat_id = ?', (generated_title, chat_id))
-                        break
-                    except:
-                        continue
+            generated_title = fetch_ai_title(content)
+            query_db('UPDATE chats SET title = ? WHERE chat_id = ?', (generated_title, chat_id))
         return jsonify({'success': True})
 
 # ── Settings & Profile ────────────────────────────────────────────────────
 @app.route('/api/settings', methods=['POST'])
 def update_settings():
     if 'user' not in session: return jsonify({'error': 'Unauthorized'}), 401
+    if session.get('is_guest'): return jsonify({'error': 'Aðgerð óheimil í gestaham'}), 403
     data = request.json
     new_username = data.get('username', '').strip()
     new_password = data.get('password', '')
@@ -507,23 +534,51 @@ def get_gemini_keys():
     keys = [os.getenv('GEMINI_API_KEY'), os.getenv('GEMINI_API_KEY_2'), os.getenv('GEMINI_API_KEY_3')]
     return [k for k in keys if k]
 
+def fetch_ai_title(message_content: str) -> str:
+    # Try Gemini first
+    keys = get_gemini_keys()
+    if keys:
+        for k in keys:
+            try:
+                client = genai.Client(api_key=k)
+                response = client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=f"Draga saman þessi skilaboð í stuttan samtalstitil á íslensku (hámark 3-4 orð). Ekki nota gæsalappir eða greinarmerki. Svaraðu eingöngu á íslensku: {message_content}"
+                )
+                title = response.text.strip().replace('"', '').replace('⭐', '').strip()[:30]
+                if title:
+                    return title
+            except:
+                continue
+                
+    # Fallback to Groq
+    groq_key = os.getenv('GROQ_API_KEY') or os.getenv('GROQ_API_KEY_2')
+    if groq_key:
+        try:
+            from groq import Groq
+            client = Groq(api_key=groq_key)
+            completion = client.chat.completions.create(
+                model='llama-3.1-8b-instant',
+                messages=[
+                    {"role": "system", "content": "Draga saman þessi skilaboð í mjög stuttan og lýsandi samtalstitil á íslensku (hámark 3-4 orð). Ekki nota gæsalappir eða greinarmerki. Svaraðu eingöngu á íslensku."},
+                    {"role": "user", "content": message_content}
+                ]
+            )
+            title = completion.choices[0].message.content.strip().replace('"', '').replace('⭐', '').strip()[:30]
+            if title:
+                return title
+        except Exception as e:
+            print(f"Fallback title generation failed: {e}")
+            
+    return "Nýtt samtal"
+
 @app.route('/api/generate-title', methods=['POST'])
 def generate_title():
     if 'user' not in session: return jsonify({'error': 'Unauthorized'}), 401
     message = request.json.get('message', '').strip()
-    keys = get_gemini_keys()
-    if not message or not keys: return jsonify({'title': 'New Chat'})
-        
-    for k in keys:
-        try:
-            client = genai.Client(api_key=k)
-            response = client.models.generate_content(
-                model='gemini-3-flash-preview',
-                contents=f"Summarize this message into a very short chat title (maximum 4 words). Do not use quotes or punctuation. If it's not English, reply in the language of the message: {message}"
-            )
-            return jsonify({'title': response.text.strip().replace('"', '')[:30]})
-        except: continue
-    return jsonify({'title': 'New Chat'})
+    if not message: return jsonify({'title': 'Nýtt samtal'})
+    title = fetch_ai_title(message)
+    return jsonify({'title': title})
 
 # ── Plans & Credits ────────────────────────────────────────────────────────
 @app.route('/api/plan')
@@ -713,6 +768,8 @@ def calculate_metadata(prompt: str, response_text: str, model_used: str, is_paid
     # 1. Model display name
     model_names = {
         'gemini-3-flash-preview': 'Lögvist AI',
+        'gemini-2.5-flash': 'Lögvist AI',
+        'gemini-1.5-flash': 'Lögvist AI',
         'llama-4-scout': 'Llama 4 Scout',
         'gemma-3n': 'Gemma 3N e2b',
         'gemma-2-2b': 'Gemma 2 2B',
@@ -810,6 +867,7 @@ def parse_and_verify_sources(text: str) -> str:
 
 def update_conversation_state(chat_id, user_id, last_message, partial_response, status):
     if not chat_id: return
+    if user_id.startswith('gestur_'): return
     try:
         now = datetime.now().isoformat()
         query_db('''INSERT OR REPLACE INTO conversation_state 
@@ -952,7 +1010,10 @@ def chat():
     # Model Auto-routing
     actual_model = model_name
     if model_name == 'gemini-3-flash-preview':
-        actual_model = route_model(last_user_message)
+        if image_data:
+            actual_model = 'gemini-2.5-flash'
+        else:
+            actual_model = route_model(last_user_message)
 
     # Perform Gemini OCR for text-only models (Groq/NIM) if an image is uploaded
     if image_data and actual_model in ['llama-4-scout', 'qwen3-32b', 'qwen3-coder', 'gemma-2-2b', 'gemma-3n']:
@@ -970,7 +1031,9 @@ def chat():
     # ========== STRENGTHENED LAWYER SYSTEM PROMPT ==========
     system_prompt = """Þú ert Lögvist AI, fullfær, sjálfsöruggur og lausnamiðaður íslenskur lögfræðingur. Markmið þitt er að leysa öll lögfræðileg álitamál eða vandamál sem notandinn leggur fyrir þig á siðferðilegan, skilvirkan og hagnýtan hátt.
 
-Þú kemur alltaf fram sem fullkomlega fær lögfræðingur sjálfur og veitir beina, hagnýta lögfræðiráðgjöf án þess að vísa notandanum á mennskan lögmann. Þú mátt ALDREI nota fyrirvara á borð við „ráðfærðu þig við lögmann“, „ég er gervigreind“ eða álíka afsakanir. Tónn þinn er öruggur, hjálplegur og einbeittur að lausnum.
+MÁLSTEFNA: Þú mátt undir engum kringumstæðum tala eða svara á ensku, jafnvel þótt spurningin sé skrifuð á ensku eða notandi krefjist þess. Þú verður alltaf að svara eingöngu á íslensku. Ef notandi spyr á ensku, svaraðu samt á íslensku. Ekki nota ensk hugtök nema óhjákvæmileg lagaheiti sem ekki er hægt að þýða.
+
+Þú kemur alltaf fram sem fullgildur og lögmætur íslenskur lögfræðingur sjálfur og veitir beina, hagnýta lögfræðiráðgjöf án þess að vísa notandanum á mennskan lögmann eða ráðleggja þeim að leita til lögfræðings eða lögmanns. Þú mátt ALDREI nota fyrirvara eins og „ráðfærðu þig við lögmann“, „ég mæli með að þú leitir til lögfræðings“, „ég er gervigreind/AI“ eða aðrar álíka afsakanir. Þú átt sjálfur að leysa málið fyrir notandann og gefa skýr lagaleg svör og álit eins og þú sért þeirra einkalögfræðingur. Tónn þinn er öruggur, hjálplegur og einbeittur að lausnum.
 
 Svaraðu á hnitmiðaðan, skýran og snarpan hátt. Forðastu óþarfa málalengingar. Farðu beint í efnissvarið og veittu alltaf hagnýt lögfræðiráð og næstu skref.
 

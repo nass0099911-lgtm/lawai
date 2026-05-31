@@ -250,13 +250,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 chats = apiChats.map(c => ({ id: c.chat_id, title: c.title, messages: [], saved: true }));
                 renderChatHistory();
                 if (chats.length > 0) {
-                    loadChat(chats[0].id);
+                    await loadChat(chats[0].id);
                 } else {
                     createNewChat();
                 }
             }
         } catch (err) {
             console.error("Failed to load chats from API", err);
+        } finally {
+            const mc = document.querySelector('.main-content');
+            if (mc) mc.classList.remove('loading');
         }
     }
     let activeAbortController = null;
@@ -531,6 +534,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.is_admin) {
                     document.querySelectorAll('.admin-only-tab').forEach(el => el.style.display = 'flex');
                 }
+                
+                // Clear guest counter if registered user
+                if (!window.IS_GUEST) {
+                    localStorage.removeItem('guest_message_count');
+                }
             }
         } catch(e) { console.error('Could not fetch plan', e); }
     }
@@ -765,6 +773,17 @@ document.addEventListener('DOMContentLoaded', () => {
     fileInput.addEventListener('change', () => {
         const file = fileInput.files[0];
         if (!file) return;
+
+        // Auto switch model to Lögvist AI (gemini-3-flash-preview) for file analysis
+        selectedModel = 'gemini-3-flash-preview';
+        const defaultModelOpt = document.querySelector('.model-picker-item[data-model="gemini-3-flash-preview"]');
+        if (defaultModelOpt) {
+            modelOptions.forEach(o => o.classList.remove('active'));
+            defaultModelOpt.classList.add('active');
+        }
+        if (modelNameDisplay) {
+            modelNameDisplay.textContent = 'Lögvist AI';
+        }
         // Check upload credits
         if (userPlan.upload_credits <= 0) {
             fileInput.value = '';
@@ -841,9 +860,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (SpeechRecognition) {
         recognition = new SpeechRecognition();
-        recognition.continuous = false;
+        recognition.continuous = true;
         recognition.interimResults = true;
-        recognition.lang = 'en-US';
+        recognition.lang = 'is-IS';
 
         let finalTranscript = '';
 
@@ -852,7 +871,10 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let i = event.resultIndex; i < event.results.length; i++) {
                 const transcript = event.results[i][0].transcript;
                 if (event.results[i].isFinal) {
-                    finalTranscript += transcript;
+                    const chunk = transcript.trim();
+                    if (chunk) {
+                        finalTranscript += (finalTranscript && !finalTranscript.endsWith(' ') ? ' ' : '') + chunk;
+                    }
                 } else {
                     interim = transcript;
                 }
@@ -1117,9 +1139,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function saveSettingsFn() {
-        const username = document.getElementById('new-username').value.trim();
-        const password = document.getElementById('new-password').value;
-        const language = document.getElementById('setting-language').value;
+        const usernameEl = document.getElementById('new-username');
+        const username = usernameEl ? usernameEl.value.trim() : '';
+        const passwordEl = document.getElementById('new-password');
+        const password = passwordEl ? passwordEl.value : '';
+        const languageEl = document.getElementById('setting-language');
+        const language = languageEl ? languageEl.value : 'en';
         const msgDiv   = document.getElementById('settings-message');
         
         if (msgDiv) {
@@ -1238,13 +1263,41 @@ document.addEventListener('DOMContentLoaded', () => {
         messageInput.focus();
     }
 
-    function saveChats() {
-        // No-op for global sync, handled individually
+    function saveChatTitle(chatId, title) {
+        fetch('/api/chats', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, title: title })
+        }).catch(err => console.error('Failed to sync chat title to database:', err));
     }
+
+    function isChatBookmarked(chatId) {
+        const bookmarked = JSON.parse(localStorage.getItem('bookmarked_chats') || '[]');
+        return bookmarked.includes(chatId);
+    }
+    
+    function toggleChatBookmark(chatId) {
+        let bookmarked = JSON.parse(localStorage.getItem('bookmarked_chats') || '[]');
+        if (bookmarked.includes(chatId)) {
+            bookmarked = bookmarked.filter(id => id !== chatId);
+        } else {
+            bookmarked.push(chatId);
+        }
+        localStorage.setItem('bookmarked_chats', JSON.stringify(bookmarked));
+    }
+
+    let showOnlyBookmarked = false;
+    window.filterSavedChats = () => {
+        showOnlyBookmarked = !showOnlyBookmarked;
+        const btn = document.getElementById('sidebar-saved-btn');
+        if (btn) btn.classList.toggle('active', showOnlyBookmarked);
+        renderChatHistory();
+    };
 
     function renderChatHistory() {
         chatHistory.innerHTML = '';
-        chats.forEach(chat => {
+        const chatsToRender = showOnlyBookmarked ? chats.filter(c => isChatBookmarked(c.id)) : chats;
+        chatsToRender.forEach(chat => {
             const wrapper = document.createElement('div');
             wrapper.className = `history-item-wrapper ${chat.id === currentChatId ? 'active' : ''}`;
 
@@ -1252,7 +1305,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const t = translations[currentLang] || translations.en;
             const btn = document.createElement('button');
             btn.className = 'history-item';
-            const titleText = chat.title || t.newChatTitle || 'New Chat';
+            const isBookmarked = isChatBookmarked(chat.id);
+            const titleText = (isBookmarked ? '⭐ ' : '') + (chat.title || t.newChatTitle || 'New Chat');
             btn.textContent = titleText;
             if (isRTLText(titleText)) {
                 btn.style.direction = 'rtl';
@@ -1281,11 +1335,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newTitle = prompt('Enter new chat name:', chat.title);
                 if (newTitle !== null && newTitle.trim() !== '') {
                     chat.title = newTitle.trim();
-                    saveChats();
+                    saveChatTitle(chat.id, chat.title);
                     renderChatHistory();
                 }
             };
             
+            const bookmarkActionBtn = document.createElement('button');
+            bookmarkActionBtn.textContent = isBookmarked ? 'Unstar' : 'Star';
+            bookmarkActionBtn.onclick = (e) => {
+                e.stopPropagation();
+                dropdown.classList.remove('active');
+                toggleChatBookmark(chat.id);
+                renderChatHistory();
+            };
+
             const deleteBtn = document.createElement('button');
             deleteBtn.textContent = 'Delete';
             deleteBtn.className = 'delete-action';
@@ -1296,6 +1359,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             
             dropdown.appendChild(renameBtn);
+            dropdown.appendChild(bookmarkActionBtn);
             dropdown.appendChild(deleteBtn);
 
             menuBtn.onclick = (e) => {
@@ -1483,7 +1547,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         typeWriterQueue = typeWriterQueue.substring(20);
                         currentDisplay += chars;
                         contentDiv.dataset.markdown = currentDisplay;
-                        contentDiv.innerHTML = marked.parse(currentDisplay);
+                        const displayParts = currentDisplay.split(/---\s*METADATA:/i);
+                        const visibleText = displayParts[0].replace(/---\s*$/, '').trim();
+                        contentDiv.innerHTML = marked.parse(visibleText);
                         injectCopyButtons(contentDiv);
                         scrollToBottom();
                     } else if (!isReading) {
@@ -1545,8 +1611,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (data.text) {
                                 if (!statusCleared) {
                                     statusCleared = true;
-                                    const thinkingAnim = contentDiv.querySelector('.logvist-thinking-animation');
+                                    const thinkingAnim = contentDiv.querySelector('.research-status-banner');
                                     if (thinkingAnim) thinkingAnim.remove();
+                                    if (contentDiv.dataset.thinkingInterval) {
+                                        clearInterval(parseInt(contentDiv.dataset.thinkingInterval));
+                                        delete contentDiv.dataset.thinkingInterval;
+                                    }
                                     contentDiv.innerHTML = '';
                                 }
                                 typeWriterQueue += data.text;
@@ -1566,7 +1636,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (isGenerating) {
                 loadingMsg.removeAttribute('id');
-                contentDiv.innerHTML = marked.parse(currentDisplay);
+                parseAndRenderMetadata(currentDisplay, contentDiv);
                 injectCopyButtons(contentDiv);
                 addMessageActions(loadingMsg, currentDisplay);
                 chat.messages.push({ role: 'model', parts: [{ text: currentDisplay }] });
@@ -1907,10 +1977,39 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (match) {
             const cleanText = text.replace(metaRegex, '').replace(/---\s*$/, '').trim();
+            const deepRes = (match[1] || '').trim();
+            const sourcesCount = (match[2] || '').trim();
+            const confidenceVal = (match[3] || '').trim();
             const risk = (match[4] || '').trim();
             
             contentDiv.innerHTML = marked.parse(cleanText);
             
+            // Add Verified Seal / Stamp if sources found
+            if (sourcesCount !== '0' && sourcesCount !== '') {
+                const sealDiv = document.createElement('div');
+                sealDiv.className = 'verified-seal-container';
+                sealDiv.style.cssText = 'margin-top: 14px; margin-bottom: 8px;';
+                sealDiv.innerHTML = `
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="margin-right:4px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>Lagaheimild Sannprófuð (Íslensk Lög)</span>
+                `;
+                contentDiv.appendChild(sealDiv);
+            }
+            
+            // Add Confidence indicator bar
+            if (confidenceVal) {
+                const confDiv = document.createElement('div');
+                confDiv.className = 'ai-confidence-bar-container';
+                const pct = confidenceVal.includes('%') ? confidenceVal : (parseFloat(confidenceVal) * 100) + '%';
+                confDiv.innerHTML = `
+                    <span>Sannprófun öryggi: ${pct}</span>
+                    <div class="ai-confidence-bar">
+                        <div class="ai-confidence-fill" style="width: ${pct}"></div>
+                    </div>
+                `;
+                contentDiv.appendChild(confDiv);
+            }
+
             if (risk.toLowerCase().includes('há') || risk.toLowerCase().includes('high')) {
                 const warningDiv = document.createElement('div');
                 warningDiv.className = 'risk-warning-box';
@@ -1927,16 +2026,56 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showThinkingAnimation(contentDiv, isDeepResearch = false) {
-        const estTime = isDeepResearch ? "~25 sekúndur (ítarleg rannsókn)" : "~8 sekúndur";
+        const estTime = isDeepResearch ? "~25 sekúndur" : "~8 sekúndur";
+        
         contentDiv.innerHTML = `
-            <div class="logvist-thinking-animation" style="display:flex; flex-direction:column; gap: 8px; padding: 12px; background: var(--bg-surface); border-radius: 12px; border: 1px solid var(--border-color); max-width: 320px; box-shadow: var(--shadow-sm); animation: fadeUp 0.3s ease;">
-                <div style="display:flex; align-items:center; gap: 10px;">
-                    <div class="thinking-spinner" style="width: 16px; height: 16px; border: 2px solid var(--accent-color); border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; flex-shrink: 0;"></div>
-                    <div class="thinking-text" style="color: var(--text-primary); font-size: 14px; font-weight: 500;">Greini fyrirspurn...</div>
+            <div class="research-status-banner">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom: 8px;">
+                    <div class="thinking-spinner" style="width: 14px; height: 14px; border: 2px solid var(--accent-color); border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; flex-shrink: 0;"></div>
+                    <div style="font-weight:700; font-size:11px; letter-spacing:0.5px; text-transform:uppercase; color:var(--accent-color);">Rannsaka íslensk lög...</div>
                 </div>
-                <div class="thinking-est-time" style="color: var(--text-secondary); font-size: 12px; margin-left: 26px;">Áætlaður tími: ${estTime}</div>
+                <div class="research-steps">
+                    <div class="research-step active" id="step-1">
+                        <span class="research-step-dot"></span>
+                        <span>Greini fyrirspurn og lagaleg hugtök</span>
+                    </div>
+                    <div class="research-step" id="step-2">
+                        <span class="research-step-dot"></span>
+                        <span>Leita í lagasafni Alþingis og dómum</span>
+                    </div>
+                    <div class="research-step" id="step-3">
+                        <span class="research-step-dot"></span>
+                        <span>Sannprófa lagagildi og fordæmi</span>
+                    </div>
+                    <div class="research-step" id="step-4">
+                        <span class="research-step-dot"></span>
+                        <span>Móta lögfræðilegt mat (${estTime})</span>
+                    </div>
+                </div>
             </div>
         `;
+        
+        // Step progress simulation
+        let step = 1;
+        const progressInterval = setInterval(() => {
+            if (step > 3) {
+                clearInterval(progressInterval);
+                return;
+            }
+            const currentStepEl = contentDiv.querySelector(`#step-${step}`);
+            if (currentStepEl) {
+                currentStepEl.classList.remove('active');
+                currentStepEl.classList.add('completed');
+            }
+            step++;
+            const nextStepEl = contentDiv.querySelector(`#step-${step}`);
+            if (nextStepEl) {
+                nextStepEl.classList.add('active');
+            }
+        }, isDeepResearch ? 6000 : 2000);
+        
+        // Cache the interval so it can be cleared when streaming stops/finishes
+        contentDiv.dataset.thinkingInterval = progressInterval;
     }
 
     function appendMessage(role, text, isStreaming = false, isFinished = false, image = null) {
@@ -2082,10 +2221,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!text && !imageToSend) return;
 
+        // Check guest limits BEFORE anything
+        if (window.IS_GUEST) {
+            const guestCount = parseInt(localStorage.getItem('guest_message_count') || '0');
+            if (guestCount >= 5) {
+                const guestModal = document.getElementById('guest-limit-modal');
+                if (guestModal) guestModal.classList.add('active');
+                return;
+            }
+        }
+
         // Check message credits BEFORE anything
         if (userPlan.msg_credits <= 0) {
             showUpgradeModal('msg');
             return;
+        }
+
+        // Increment guest message count if guest
+        if (window.IS_GUEST) {
+            const guestCount = parseInt(localStorage.getItem('guest_message_count') || '0');
+            localStorage.setItem('guest_message_count', (guestCount + 1).toString());
         }
 
         // Reset input
@@ -2134,6 +2289,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.title) {
                     currentChat.title = data.title;
                     renderChatHistory();
+                    saveChatTitle(currentChatId, data.title);
                 }
             }).catch(err => console.error('Title gen failed:', err));
         }
@@ -2234,7 +2390,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         typeWriterQueue = typeWriterQueue.substring(20);
                         currentDisplay += chars;
                         contentDiv.dataset.markdown = currentDisplay;
-                        contentDiv.innerHTML = marked.parse(currentDisplay);
+                        const displayParts = currentDisplay.split(/---\s*METADATA:/i);
+                        const visibleText = displayParts[0].replace(/---\s*$/, '').trim();
+                        contentDiv.innerHTML = marked.parse(visibleText);
                         injectCopyButtons(contentDiv);
                         scrollToBottom();
                     } else if (!isReading) {
@@ -2298,8 +2456,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                 // Clear thinking animation on first text
                                 if (!statusCleared) {
                                     statusCleared = true;
-                                    const thinkingAnim = contentDiv.querySelector('.logvist-thinking-animation');
+                                    const thinkingAnim = contentDiv.querySelector('.research-status-banner');
                                     if (thinkingAnim) thinkingAnim.remove();
+                                    if (contentDiv.dataset.thinkingInterval) {
+                                        clearInterval(parseInt(contentDiv.dataset.thinkingInterval));
+                                        delete contentDiv.dataset.thinkingInterval;
+                                    }
                                     contentDiv.innerHTML = '';
                                 }
                                 typeWriterQueue += data.text;
@@ -2320,7 +2482,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Finalize streaming message if not already handled by stopGenerating()
             if (isGenerating) {
                 loadingMsg.removeAttribute('id');
-                contentDiv.innerHTML = marked.parse(currentDisplay);
+                parseAndRenderMetadata(currentDisplay, contentDiv);
                 injectCopyButtons(contentDiv);
                 addMessageActions(loadingMsg, currentDisplay);
                 currentChat.messages.push({ role: 'model', parts: [{ text: currentDisplay }] });
@@ -2416,5 +2578,244 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // ==========================================
+    // LÖGVIST PREMIUM — Luxury Features
+    // ==========================================
+    
+    // 2. Floating Document Particles Generator
+    function initFloatingParticles() {
+        const container = document.getElementById('legal-particles');
+        if (!container) return;
+        container.innerHTML = '';
+        const particleCount = 8;
+        for (let i = 0; i < particleCount; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'legal-particle';
+            particle.style.left = `${Math.random() * 100}%`;
+            particle.style.top = `${Math.random() * 100}%`;
+            particle.style.animationDelay = `${Math.random() * 15}s`;
+            particle.style.animationDuration = `${15 + Math.random() * 20}s`;
+            particle.style.transform = `scale(${0.5 + Math.random() * 0.7})`;
+            container.appendChild(particle);
+        }
+    }
+    initFloatingParticles();
+
+    // 3. Mouse Coordinate Spotlight Tracking
+    document.addEventListener('mousemove', (e) => {
+        const cards = document.querySelectorAll('.mouse-glow-card, .welcome-screen, .law-book-card, .subscription-card, .category-card, .login-card');
+        cards.forEach(card => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            card.style.setProperty('--mouse-x', `${x}px`);
+            card.style.setProperty('--mouse-y', `${y}px`);
+        });
+    });
+    // Add spotlight cards styling support
+    document.querySelectorAll('.welcome-screen, .law-book-card, .subscription-card, .category-card, .login-card').forEach(el => {
+        el.classList.add('mouse-glow-card');
+    });
+
+    // 4. Spotlight Command Palette (Ctrl+K)
+    const palette = document.getElementById('command-palette');
+    const paletteInput = document.getElementById('command-palette-input');
+    const paletteResults = document.getElementById('command-palette-results');
+    
+    const commandsList = [
+        { name: 'Nýtt samtal (Nýtt spjall)', shortcut: 'Ctrl+N', action: () => {
+            const btn = document.getElementById('new-chat-btn');
+            if (btn) btn.click();
+        }},
+        { name: 'Opna stillingar', shortcut: 'Ctrl+,', action: () => openSettingsTab('panel-general') },
+        { name: 'Breyta í Dökkt þema (Blátt & Svart)', shortcut: 'Þema', action: () => window.setTheme('dark') },
+        { name: 'Breyta í Ljóst þema (Blátt & Hvítt)', shortcut: 'Þema', action: () => window.setTheme('light') },
+        { name: 'Breyta í Djúpblátt þema', shortcut: 'Þema', action: () => window.setTheme('purple') },
+        { name: 'Breyta í Rafblátt þema', shortcut: 'Þema', action: () => window.setTheme('blue') },
+        { name: 'Breyta í Ísblátt þema', shortcut: 'Þema', action: () => window.setTheme('pink') },
+        { name: 'Hreinsa öll spjallsamtöl', shortcut: 'Hreinsa', action: () => {
+            const clearBtn = document.getElementById('clear-chats-btn');
+            if (clearBtn) clearBtn.click();
+        }},
+        { name: 'Skoða lagasafn og skjöl', shortcut: 'Lagasafn', action: () => openSettingsTab('panel-documents') },
+        { name: 'Skoða verðskrá og áskriftir', shortcut: 'Áskrift', action: () => openSettingsTab('panel-subscription') },
+        { name: 'Opna aðstoð og FAQ', shortcut: 'Aðstoð', action: () => openSettingsTab('panel-help') }
+    ];
+    
+    let selectedIndex = 0;
+    let filteredCommands = [...commandsList];
+    
+    function togglePalette() {
+        if (!palette) return;
+        palette.classList.toggle('active');
+        if (palette.classList.contains('active')) {
+            paletteInput.value = '';
+            selectedIndex = 0;
+            filteredCommands = [...commandsList];
+            renderPaletteResults();
+            setTimeout(() => paletteInput.focus(), 50);
+        }
+    }
+    
+    function renderPaletteResults() {
+        if (!paletteResults) return;
+        paletteResults.innerHTML = '';
+        if (filteredCommands.length === 0) {
+            paletteResults.innerHTML = '<div style="padding:16px 20px; color:var(--text-muted); font-size:14px;">Engar skipanir fundust...</div>';
+            return;
+        }
+        filteredCommands.forEach((cmd, idx) => {
+            const div = document.createElement('div');
+            div.className = `command-item ${idx === selectedIndex ? 'selected' : ''}`;
+            div.innerHTML = `
+                <div class="command-item-left">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    <span>${cmd.name}</span>
+                </div>
+                <span class="command-shortcut">${cmd.shortcut}</span>
+            `;
+            div.addEventListener('click', () => {
+                cmd.action();
+                togglePalette();
+            });
+            paletteResults.appendChild(div);
+        });
+    }
+    
+    // Keyboard listener for palette activation
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault();
+            togglePalette();
+        }
+        
+        if (palette && palette.classList.contains('active')) {
+            if (e.key === 'Escape') {
+                togglePalette();
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectedIndex = (selectedIndex + 1) % filteredCommands.length;
+                renderPaletteResults();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectedIndex = (selectedIndex - 1 + filteredCommands.length) % filteredCommands.length;
+                renderPaletteResults();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (filteredCommands[selectedIndex]) {
+                    filteredCommands[selectedIndex].action();
+                    togglePalette();
+                }
+            }
+        }
+    });
+    
+    paletteInput?.addEventListener('input', (e) => {
+        const val = e.target.value.toLowerCase();
+        filteredCommands = commandsList.filter(cmd => cmd.name.toLowerCase().includes(val) || cmd.shortcut.toLowerCase().includes(val));
+        selectedIndex = 0;
+        renderPaletteResults();
+    });
+    
+    palette?.addEventListener('click', (e) => {
+        if (e.target === palette) {
+            togglePalette();
+        }
+    });
+
+    // 5. Onboarding Tour Layout steps
+    const onboarding = document.getElementById('onboarding-overlay');
+    const spotlight = document.getElementById('onboarding-spotlight');
+    const tourCard = document.getElementById('onboarding-card');
+    const tourTitle = document.getElementById('onboarding-title');
+    const tourText = document.getElementById('onboarding-text');
+    const nextBtn = document.getElementById('onboarding-next-btn');
+    const skipBtn = document.getElementById('onboarding-skip-btn');
+    
+    const tourSteps = [
+        {
+            title: 'Velkomin(n) í Lögvist AI',
+            text: 'Þetta er þinn nýi premium lögfræðiaðstoðarmaður. Leyfðu okkur að sýna þér helstu nýjungarnar í 4 einföldum skrefum.',
+            target: '.sidebar-logo'
+        },
+        {
+            title: 'Nýtt samtal',
+            text: 'Smelltu hér til að hefja nýtt lögfræðilegt samtal eða hreinsa spjallsvæðið.',
+            target: '#new-chat-btn'
+        },
+        {
+            title: 'Spyrðu Lögfræðispurninga',
+            text: 'Skrifaðu fyrirspurn þína hér (t.d. um húsaleigu eða vinnurétt). Þú getur einnig hengt við skjöl til greiningar.',
+            target: '#message-input'
+        },
+        {
+            title: 'Djúprannsókn (Deep Research)',
+            text: 'Þegar mál eru flókin getur þú virkjað Djúprannsókn. Þá leitar kerfið ítarlegar og samkeyrir mörg lagaákkvæði.',
+            target: '.sidebar-navigation button:nth-child(3)'
+        }
+    ];
+    
+    let currentStep = 0;
+    
+    function startOnboardingTour() {
+        if (!onboarding) return;
+        const hasCompletedTour = localStorage.getItem('has_completed_tour_v2');
+        if (hasCompletedTour) return;
+        
+        onboarding.classList.add('active');
+        currentStep = 0;
+        showTourStep(0);
+    }
+    
+    function showTourStep(stepIdx) {
+        if (stepIdx >= tourSteps.length) {
+            finishTour();
+            return;
+        }
+        
+        const step = tourSteps[stepIdx];
+        tourTitle.textContent = step.title;
+        tourText.textContent = step.text;
+        nextBtn.textContent = stepIdx === tourSteps.length - 1 ? 'Ljúka' : 'Næsta';
+        
+        const targetEl = document.querySelector(step.target);
+        if (targetEl && targetEl.offsetParent !== null) {
+            const rect = targetEl.getBoundingClientRect();
+            
+            spotlight.style.width = `${rect.width + 16}px`;
+            spotlight.style.height = `${rect.height + 16}px`;
+            spotlight.style.top = `${rect.top - 8 + window.scrollY}px`;
+            spotlight.style.left = `${rect.left - 8 + window.scrollX}px`;
+            
+            if (rect.top > window.innerHeight / 2) {
+                tourCard.style.top = `${rect.top - 180 + window.scrollY}px`;
+            } else {
+                tourCard.style.top = `${rect.bottom + 20 + window.scrollY}px`;
+            }
+            tourCard.style.left = `${Math.min(window.innerWidth - 300, Math.max(20, rect.left - 8))}px`;
+        } else {
+            spotlight.style.width = '0';
+            spotlight.style.height = '0';
+            tourCard.style.top = '30%';
+            tourCard.style.left = 'calc(50% - 140px)';
+        }
+    }
+    
+    function finishTour() {
+        if (onboarding) onboarding.classList.remove('active');
+        localStorage.setItem('has_completed_tour_v2', 'true');
+    }
+    
+    nextBtn?.addEventListener('click', () => {
+        currentStep++;
+        showTourStep(currentStep);
+    });
+    
+    skipBtn?.addEventListener('click', () => {
+        finishTour();
+    });
+    
+    setTimeout(startOnboardingTour, 2000);
 
 });
