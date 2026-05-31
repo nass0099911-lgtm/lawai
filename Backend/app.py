@@ -83,6 +83,40 @@ DB_PATH = os.path.join(os.path.dirname(__file__), 'database', 'aura.db')
 PFP_DIR = os.path.join(os.path.dirname(__file__), '..', 'Uploads', 'Profiles')
 os.makedirs(PFP_DIR, exist_ok=True)
 
+def run_migrations():
+    """Ensure all required tables and columns exist."""
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    # New tables for admin system
+    c.execute('''CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admin_user TEXT,
+        action TEXT,
+        target TEXT,
+        details TEXT,
+        timestamp TEXT
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS ai_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )''')
+    # Add missing columns to users table (safe to run multiple times)
+    for col_sql in [
+        "ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN last_login TEXT",
+        "ALTER TABLE users ADD COLUMN login_count INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN theme TEXT DEFAULT 'dark'",
+    ]:
+        try:
+            c.execute(col_sql)
+        except Exception:
+            pass  # Column already exists
+    conn.commit()
+    conn.close()
+
+run_migrations()
+
+
 # ── Database Helpers ──────────────────────────────────────────────────────
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -347,25 +381,6 @@ def admin_stats():
         'registered': registered_count
     })
 
-@app.route('/api/admin/users', methods=['GET'])
-def admin_get_users():
-    if not is_admin(): return jsonify({'error': 'Unauthorized'}), 401
-    users = query_db('SELECT username, plan, msg_credits, joined, is_admin FROM users')
-    return jsonify([dict(u) for u in users])
-
-@app.route('/api/admin/user/<target_user>', methods=['POST'])
-def admin_update_user(target_user):
-    if not is_admin(): return jsonify({'error': 'Unauthorized'}), 401
-    data = request.json
-    plan = data.get('plan')
-    is_adm = data.get('is_admin')
-    
-    if plan:
-        query_db('UPDATE users SET plan = ? WHERE username = ?', (plan, target_user))
-    if is_adm is not None:
-        query_db('UPDATE users SET is_admin = ? WHERE username = ?', (int(is_adm), target_user))
-        
-    return jsonify({'success': True})
 
 # ── Chat Database Routes ──────────────────────────────────────────────────
 @app.route('/api/chats', methods=['GET', 'POST'])
@@ -467,6 +482,330 @@ def handle_messages(chat_id):
             generated_title = fetch_ai_title(content)
             query_db('UPDATE chats SET title = ? WHERE chat_id = ?', (generated_title, chat_id))
         return jsonify({'success': True})
+
+    # ── Admin API ─────────────────────────────────────────────────────────────
+@app.route('/api/admin/users')
+def admin_list_users():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    users = query_db('SELECT username, plan, msg_credits, voice_credits, upload_credits, is_admin, joined FROM users')
+    return jsonify([dict(u) for u in users])
+
+@app.route('/api/admin/users/<username>/plan', methods=['POST'])
+def admin_set_plan(username):
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    plan = request.json.get('plan', 'free')
+    pd = query_db('SELECT * FROM plans WHERE plan_name = ?', (plan,), one=True)
+    if not pd: return jsonify({'error': 'Invalid plan'}), 400
+    query_db('''UPDATE users SET plan=?, msg_credits=?, voice_credits=?, upload_credits=? 
+               WHERE username=?''', (plan, pd['msg_credits'], pd['voice_credits'], pd['upload_credits'], username))
+    return jsonify({'success': True})
+
+@app.route('/api/admin/users/<username>', methods=['DELETE'])
+def admin_delete_user(username):
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    target = query_db('SELECT is_admin FROM users WHERE username = ?', (username,), one=True)
+    if target and target['is_admin']:
+        return jsonify({'error': 'Cannot delete administrator'}), 400
+    query_db('DELETE FROM messages WHERE chat_id IN (SELECT chat_id FROM chats WHERE username = ?)', (username,))
+    query_db('DELETE FROM chats WHERE username = ?', (username,))
+    query_db('DELETE FROM conversation_state WHERE user_id = ?', (username,))
+    query_db('DELETE FROM users WHERE username = ?', (username,))
+    return jsonify({'success': True})
+
+@app.route('/api/admin/create-code', methods=['POST'])
+def admin_create_code():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    data = request.json
+    plan = data.get('plan', 'pro')
+    max_uses = data.get('max_uses', 1)
+    code = secrets.token_hex(8).upper()
+    query_db('INSERT INTO codes (code, plan, max_uses, used) VALUES (?, ?, ?, 0)', (code, plan, max_uses))
+    return jsonify({'code': code})
+
+@app.route('/api/admin/codes/generate', methods=['POST'])
+def admin_codes_generate():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    data = request.json
+    plan = data.get('plan', 'pro')
+    max_uses = data.get('max_uses', 1)
+    code = secrets.token_hex(8).upper()
+    query_db('INSERT INTO codes (code, plan, max_uses, used) VALUES (?, ?, ?, 0)', (code, plan, max_uses))
+    return jsonify({'code': code})
+
+@app.route('/api/admin/codes', methods=['GET'])
+def admin_list_codes():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    codes = query_db('SELECT * FROM codes')
+    result = {}
+    for c in codes:
+        result[c['code']] = {
+            'plan': c['plan'],
+            'used': c['used'],
+            'max_uses': c['max_uses']
+        }
+    return jsonify(result)
+
+@app.route('/api/admin/codes/<code_val>', methods=['DELETE'])
+def admin_delete_code(code_val):
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    query_db('DELETE FROM codes WHERE code = ?', (code_val,))
+    return jsonify({'success': True})
+
+@app.route('/api/admin/plans', methods=['GET'])
+def admin_get_plans():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    plans = query_db('SELECT * FROM plans')
+    result = {}
+    for p in plans:
+        result[p['plan_name']] = {
+            'msg_credits': p['msg_credits'],
+            'voice_credits': p['voice_credits'],
+            'upload_credits': p['upload_credits']
+        }
+    return jsonify(result)
+
+@app.route('/api/admin/plans/update', methods=['POST'])
+def admin_update_plan_limits():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    data = request.json
+    plan = data.get('plan')
+    limits = data.get('limits', {})
+    query_db('UPDATE plans SET msg_credits=?, voice_credits=?, upload_credits=? WHERE plan_name=?',
+             (limits.get('msg_credits'), limits.get('voice_credits'), limits.get('upload_credits'), plan))
+    return jsonify({'success': True})
+
+# ── Extended Admin API ─────────────────────────────────────────────────────
+
+def admin_log(action, target='', details=''):
+    """Write an entry to the admin audit log."""
+    try:
+        who = session.get('user', 'unknown')
+        query_db(
+            'INSERT INTO audit_log (admin_user, action, target, details, timestamp) VALUES (?,?,?,?,?)',
+            (who, action, target, details, datetime.now().isoformat())
+        )
+    except Exception as e:
+        print(f'audit_log error: {e}')
+
+@app.route('/api/admin/users/full', methods=['GET'])
+def admin_users_full():
+    """Return full user details including password hash, theme, ban status, last_login."""
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    try:
+        users = query_db('''SELECT username, password, plan, msg_credits, voice_credits,
+                            upload_credits, is_admin, joined, theme, is_banned, last_login, login_count
+                            FROM users''')
+    except Exception:
+        # Fallback if columns don't exist yet (migration adds them)
+        users = query_db('SELECT username, password, plan, msg_credits, is_admin, joined FROM users')
+    return jsonify([dict(u) for u in users])
+
+@app.route('/api/admin/users/<username>/update', methods=['POST'])
+def admin_update_user_full(username):
+    """Update any user field from the admin panel."""
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    data = request.json
+    changes = []
+
+    new_username = data.get('new_username', '').strip()
+    new_password = data.get('new_password', '').strip()
+    plan = data.get('plan')
+    is_adm = data.get('is_admin')
+    theme = data.get('theme', '').strip()
+    msg_credits = data.get('msg_credits')
+    is_banned = data.get('is_banned')
+
+    if plan:
+        query_db('UPDATE users SET plan=? WHERE username=?', (plan, username))
+        changes.append(f'plan={plan}')
+    if is_adm is not None:
+        query_db('UPDATE users SET is_admin=? WHERE username=?', (int(is_adm), username))
+        changes.append(f'is_admin={is_adm}')
+    if theme:
+        query_db('UPDATE users SET theme=? WHERE username=?', (theme, username))
+        changes.append(f'theme={theme}')
+    if msg_credits is not None:
+        query_db('UPDATE users SET msg_credits=? WHERE username=?', (int(msg_credits), username))
+        changes.append(f'msg_credits={msg_credits}')
+    if is_banned is not None:
+        try:
+            query_db('UPDATE users SET is_banned=? WHERE username=?', (int(is_banned), username))
+            changes.append(f'is_banned={is_banned}')
+        except Exception:
+            pass
+    if new_password:
+        hashed = generate_password_hash(new_password)
+        query_db('UPDATE users SET password=? WHERE username=?', (hashed, username))
+        changes.append('password_reset')
+    if new_username and new_username != username:
+        existing = query_db('SELECT username FROM users WHERE username=?', (new_username,), one=True)
+        if existing:
+            return jsonify({'error': 'Notendanafn er þegar til'}), 409
+        query_db('UPDATE users SET username=? WHERE username=?', (new_username, username))
+        query_db('UPDATE chats SET username=? WHERE username=?', (new_username, username))
+        query_db('UPDATE conversation_state SET user_id=? WHERE user_id=?', (new_username, username))
+        changes.append(f'renamed→{new_username}')
+
+    admin_log('update_user', username, ', '.join(changes))
+    return jsonify({'success': True})
+
+@app.route('/api/admin/users/<username>/ban', methods=['POST'])
+def admin_ban_user(username):
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    banned = request.json.get('banned', True)
+    try:
+        query_db('UPDATE users SET is_banned=? WHERE username=?', (int(banned), username))
+    except Exception:
+        pass
+    action = 'ban_user' if banned else 'unban_user'
+    admin_log(action, username)
+    return jsonify({'success': True})
+
+@app.route('/api/admin/users/<username>/reset-password', methods=['POST'])
+def admin_reset_password(username):
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    new_pw = request.json.get('password', '').strip()
+    if not new_pw:
+        return jsonify({'error': 'Password required'}), 400
+    query_db('UPDATE users SET password=? WHERE username=?', (generate_password_hash(new_pw), username))
+    admin_log('reset_password', username)
+    return jsonify({'success': True})
+
+@app.route('/api/admin/conversations', methods=['GET'])
+def admin_list_conversations():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    user_filter = request.args.get('user', '')
+    limit = int(request.args.get('limit', 50))
+    if user_filter:
+        chats = query_db(
+            'SELECT c.*, (SELECT COUNT(*) FROM messages m WHERE m.chat_id=c.chat_id) as msg_count FROM chats c WHERE c.username LIKE ? ORDER BY c.updated_at DESC LIMIT ?',
+            (f'%{user_filter}%', limit)
+        )
+    else:
+        chats = query_db(
+            'SELECT c.*, (SELECT COUNT(*) FROM messages m WHERE m.chat_id=c.chat_id) as msg_count FROM chats c ORDER BY c.updated_at DESC LIMIT ?',
+            (limit,)
+        )
+    return jsonify([dict(c) for c in chats])
+
+@app.route('/api/admin/conversations/<chat_id>', methods=['GET'])
+def admin_get_conversation(chat_id):
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    chat = query_db('SELECT * FROM chats WHERE chat_id=?', (chat_id,), one=True)
+    msgs = query_db('SELECT * FROM messages WHERE chat_id=? ORDER BY created_at ASC', (chat_id,))
+    return jsonify({
+        'chat': dict(chat) if chat else {},
+        'messages': [dict(m) for m in msgs]
+    })
+
+@app.route('/api/admin/system-prompt', methods=['GET'])
+def admin_get_system_prompt():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    try:
+        row = query_db("SELECT value FROM ai_settings WHERE key='system_prompt'", one=True)
+        return jsonify({'system_prompt': row['value'] if row else ''})
+    except Exception:
+        return jsonify({'system_prompt': ''})
+
+@app.route('/api/admin/system-prompt', methods=['POST'])
+def admin_set_system_prompt():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    prompt = request.json.get('system_prompt', '')
+    try:
+        query_db("INSERT OR REPLACE INTO ai_settings (key, value) VALUES ('system_prompt', ?)", (prompt,))
+    except Exception:
+        pass
+    admin_log('update_system_prompt', details=f'{len(prompt)} chars')
+    return jsonify({'success': True})
+
+@app.route('/api/admin/ai-settings', methods=['GET'])
+def admin_get_ai_settings():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    try:
+        rows = query_db('SELECT key, value FROM ai_settings')
+        return jsonify({r['key']: r['value'] for r in rows})
+    except Exception:
+        return jsonify({})
+
+@app.route('/api/admin/ai-settings', methods=['POST'])
+def admin_set_ai_settings():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    data = request.json
+    for key, value in data.items():
+        try:
+            query_db("INSERT OR REPLACE INTO ai_settings (key, value) VALUES (?, ?)", (key, str(value)))
+        except Exception:
+            pass
+    admin_log('update_ai_settings', details=str(list(data.keys())))
+    return jsonify({'success': True})
+
+@app.route('/api/admin/analytics', methods=['GET'])
+def admin_analytics():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    try:
+        daily = query_db('''
+            SELECT DATE(created_at) as day, COUNT(*) as count
+            FROM messages WHERE role='user'
+            AND created_at >= DATE('now', '-30 days')
+            GROUP BY day ORDER BY day ASC
+        ''')
+    except Exception:
+        daily = []
+    try:
+        top_users = query_db('''
+            SELECT c.username, COUNT(m.id) as msg_count
+            FROM messages m JOIN chats c ON m.chat_id=c.chat_id
+            WHERE m.role='user' GROUP BY c.username
+            ORDER BY msg_count DESC LIMIT 10
+        ''')
+    except Exception:
+        top_users = []
+    try:
+        plans_dist = query_db('''
+            SELECT plan, COUNT(*) as count FROM users
+            WHERE username NOT LIKE 'gestur_%'
+            GROUP BY plan
+        ''')
+    except Exception:
+        plans_dist = []
+    try:
+        new_users = query_db('''
+            SELECT DATE(joined) as day, COUNT(*) as count
+            FROM users WHERE joined >= DATE('now','-7 days')
+            GROUP BY day ORDER BY day ASC
+        ''')
+    except Exception:
+        new_users = []
+    return jsonify({
+        'daily_messages': [dict(d) for d in daily],
+        'top_users': [dict(u) for u in top_users],
+        'plan_distribution': [dict(p) for p in plans_dist],
+        'new_users': [dict(u) for u in new_users]
+    })
+
+@app.route('/api/admin/audit-log', methods=['GET'])
+def admin_audit_log():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    limit = int(request.args.get('limit', 100))
+    try:
+        rows = query_db('SELECT * FROM audit_log ORDER BY id DESC LIMIT ?', (limit,))
+        return jsonify([dict(r) for r in rows])
+    except Exception:
+        return jsonify([])
+
+@app.route('/api/admin/security', methods=['GET'])
+def admin_security():
+    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
+    try:
+        banned = query_db('SELECT username, joined FROM users WHERE is_banned=1')
+        banned_list = [dict(b) for b in banned]
+    except Exception:
+        banned_list = []
+    rl_summary = [{'username': k, 'recent_requests': len(v)} for k, v in rate_limits.items() if len(v) > 0]
+    return jsonify({
+        'banned_users': banned_list,
+        'rate_limit_events': rl_summary
+    })
 
 # ── Settings & Profile ────────────────────────────────────────────────────
 @app.route('/api/settings', methods=['POST'])
@@ -614,97 +953,6 @@ def redeem_code():
 def use_voice_credit():
     if 'user' not in session: return jsonify({'error': 'Unauthorized'}), 401
     return jsonify({'success': True, 'voice_credits': 9999})
-
-# ── Admin API ─────────────────────────────────────────────────────────────
-@app.route('/api/admin/users')
-def admin_list_users():
-    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
-    users = query_db('SELECT username, plan, msg_credits, voice_credits, upload_credits, is_admin, joined FROM users')
-    return jsonify([dict(u) for u in users])
-
-@app.route('/api/admin/users/<username>/plan', methods=['POST'])
-def admin_set_plan(username):
-    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
-    plan = request.json.get('plan', 'free')
-    pd = query_db('SELECT * FROM plans WHERE plan_name = ?', (plan,), one=True)
-    if not pd: return jsonify({'error': 'Invalid plan'}), 400
-    query_db('''UPDATE users SET plan=?, msg_credits=?, voice_credits=?, upload_credits=? 
-               WHERE username=?''', (plan, pd['msg_credits'], pd['voice_credits'], pd['upload_credits'], username))
-    return jsonify({'success': True})
-
-@app.route('/api/admin/users/<username>', methods=['DELETE'])
-def admin_delete_user(username):
-    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
-    target = query_db('SELECT is_admin FROM users WHERE username = ?', (username,), one=True)
-    if target and target['is_admin']:
-        return jsonify({'error': 'Cannot delete administrator'}), 400
-    query_db('DELETE FROM messages WHERE chat_id IN (SELECT chat_id FROM chats WHERE username = ?)', (username,))
-    query_db('DELETE FROM chats WHERE username = ?', (username,))
-    query_db('DELETE FROM conversation_state WHERE user_id = ?', (username,))
-    query_db('DELETE FROM users WHERE username = ?', (username,))
-    return jsonify({'success': True})
-
-@app.route('/api/admin/create-code', methods=['POST'])
-def admin_create_code():
-    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
-    data = request.json
-    plan = data.get('plan', 'pro')
-    max_uses = data.get('max_uses', 1)
-    code = secrets.token_hex(8).upper()
-    query_db('INSERT INTO codes (code, plan, max_uses, used) VALUES (?, ?, ?, 0)', (code, plan, max_uses))
-    return jsonify({'code': code})
-
-@app.route('/api/admin/codes/generate', methods=['POST'])
-def admin_codes_generate():
-    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
-    data = request.json
-    plan = data.get('plan', 'pro')
-    max_uses = data.get('max_uses', 1)
-    code = secrets.token_hex(8).upper()
-    query_db('INSERT INTO codes (code, plan, max_uses, used) VALUES (?, ?, ?, 0)', (code, plan, max_uses))
-    return jsonify({'code': code})
-
-@app.route('/api/admin/codes', methods=['GET'])
-def admin_list_codes():
-    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
-    codes = query_db('SELECT * FROM codes')
-    result = {}
-    for c in codes:
-        result[c['code']] = {
-            'plan': c['plan'],
-            'used': c['used'],
-            'max_uses': c['max_uses']
-        }
-    return jsonify(result)
-
-@app.route('/api/admin/codes/<code_val>', methods=['DELETE'])
-def admin_delete_code(code_val):
-    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
-    query_db('DELETE FROM codes WHERE code = ?', (code_val,))
-    return jsonify({'success': True})
-
-@app.route('/api/admin/plans', methods=['GET'])
-def admin_get_plans():
-    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
-    plans = query_db('SELECT * FROM plans')
-    result = {}
-    for p in plans:
-        result[p['plan_name']] = {
-            'msg_credits': p['msg_credits'],
-            'voice_credits': p['voice_credits'],
-            'upload_credits': p['upload_credits']
-        }
-    return jsonify(result)
-
-@app.route('/api/admin/plans/update', methods=['POST'])
-def admin_update_plan_limits():
-    if not is_admin(): return jsonify({'error': 'Forbidden'}), 403
-    data = request.json
-    plan = data.get('plan')
-    limits = data.get('limits', {})
-    query_db('UPDATE plans SET msg_credits=?, voice_credits=?, upload_credits=? WHERE plan_name=?',
-             (limits.get('msg_credits'), limits.get('voice_credits'), limits.get('upload_credits'), plan))
-    return jsonify({'success': True})
 
 # ── Model Routing Helper ──────────────────────────────────────────────────
 def route_model(prompt: str) -> str:
@@ -965,18 +1213,36 @@ def chat():
                     last_user_message = parts[0].get('text', '')
                 break
 
-    # Extract text from uploaded document files (PDF, DOCX, TXT)
+    # File attachment handling — keep raw bytes for Gemini, extract text for other models
+    file_bytes_for_gemini = None  # Will be set if a file was uploaded
+    file_mime_for_gemini = None
+
     if file_data and file_name:
         try:
             file_bytes = base64.b64decode(file_data)
+            # Determine MIME type
+            if file_type == 'application/pdf' or file_name.lower().endswith('.pdf'):
+                resolved_mime = 'application/pdf'
+            elif file_type in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'] or file_name.lower().endswith(('.docx', '.doc')):
+                resolved_mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            elif file_type == 'text/plain' or file_name.lower().endswith('.txt'):
+                resolved_mime = 'text/plain'
+            else:
+                resolved_mime = file_type or 'application/octet-stream'
+
+            # Always store for Gemini native use
+            file_bytes_for_gemini = file_bytes
+            file_mime_for_gemini = resolved_mime
+
+            # Also extract text as fallback for non-Gemini models
             extracted_text = ""
-            if file_type == 'application/pdf' or file_name.endswith('.pdf'):
+            if resolved_mime == 'application/pdf':
                 extracted_text = parse_pdf(file_bytes)
-            elif file_type in ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'] or file_name.endswith(('.docx', '.doc')):
+            elif 'wordprocessingml' in resolved_mime or 'msword' in resolved_mime:
                 extracted_text = parse_docx(file_bytes)
-            elif file_type == 'text/plain' or file_name.endswith('.txt'):
+            elif resolved_mime == 'text/plain':
                 extracted_text = file_bytes.decode('utf-8', errors='ignore')
-            
+
             if extracted_text:
                 doc_prompt = f"[Viðhengi: {file_name}]\nInnihald skjalsins:\n\"\"\"\n{extracted_text}\n\"\"\"\n\nSpurning: {last_user_message}"
                 for msg in reversed(messages):
@@ -986,6 +1252,7 @@ def chat():
                         break
         except Exception as ex:
             print(f"Error processing file attachment: {ex}")
+
 
     # If this is a resumption, modify the last user message to request completion
     if resume and chat_id:
@@ -1008,14 +1275,16 @@ def chat():
                     break
 
     # Model Auto-routing
+    # If a file (PDF/DOCX/image) was attached, always use Gemini which handles files natively
+    has_file_attachment = bool(file_data and file_name) or bool(image_data)
     actual_model = model_name
     if model_name == 'gemini-3-flash-preview':
-        if image_data:
-            actual_model = 'gemini-2.5-flash'
+        if has_file_attachment:
+            actual_model = 'gemini-2.5-flash'  # Gemini handles all file types natively
         else:
             actual_model = route_model(last_user_message)
 
-    # Perform Gemini OCR for text-only models (Groq/NIM) if an image is uploaded
+    # For non-Gemini models: OCR images via Gemini, then pass extracted text
     if image_data and actual_model in ['llama-4-scout', 'qwen3-32b', 'qwen3-coder', 'gemma-2-2b', 'gemma-3n']:
         ocr_text = perform_ocr_gemini(image_data, data.get('image_mime', 'image/jpeg'))
         if ocr_text:
@@ -1245,14 +1514,15 @@ Fyrir lögfræðilegar spurningar eða fyrirspurnir sem varða réttindi, skyldu
                         
                         text = messages[-1]['parts'][0]['text'] if messages[-1].get('parts') and len(messages[-1]['parts']) > 0 and messages[-1]['parts'][0].get('text') else "..."
                         
+                        # Build parts list — Gemini can read images, PDFs, DOCX natively
+                        send_parts = []
                         if image_data:
-                            parts = [
-                                types.Part.from_bytes(data=base64.b64decode(image_data), mime_type=data.get('image_mime', 'image/jpeg')),
-                                types.Part.from_text(text=text)
-                            ]
-                            response = chat_session.send_message_stream(parts)
-                        else:
-                            response = chat_session.send_message_stream(text)
+                            send_parts.append(types.Part.from_bytes(data=base64.b64decode(image_data), mime_type=data.get('image_mime', 'image/jpeg')))
+                        if file_bytes_for_gemini:
+                            send_parts.append(types.Part.from_bytes(data=file_bytes_for_gemini, mime_type=file_mime_for_gemini))
+                        send_parts.append(types.Part.from_text(text=last_user_message if (image_data or file_bytes_for_gemini) else text))
+
+                        response = chat_session.send_message_stream(send_parts if (image_data or file_bytes_for_gemini) else text)
                         
                         full_text = initial_text
                         for chunk in response:

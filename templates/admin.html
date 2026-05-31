@@ -1,792 +1,1122 @@
 <!DOCTYPE html>
 <html lang="is">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stjórnborð - Lögvist</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        html, body {
-            height: auto !important;
-            overflow-y: auto !important;
-            display: block !important;
-        }
-        
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background-color: var(--bg-main, #000000);
-            color: var(--text-primary, #ffffff);
-            margin: 0;
-            padding: 24px;
-            min-height: 100vh;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lögvist — Core Admin Control System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#04040a;--bg-card:#0b0b14;--bg-surface:#111120;--bg-hover:#181828;
+  --border:rgba(80,80,180,0.12);--border-hi:rgba(100,140,255,0.35);
+  --accent:#4f8eff;--accent2:#7c5ef7;--accent3:#06b6d4;
+  --glow:rgba(79,142,255,0.15);--glow2:rgba(124,94,247,0.15);
+  --text:#e2e2f0;--muted:#6b6b90;--dim:#3a3a5a;
+  --green:#10b981;--red:#ef4444;--orange:#f59e0b;--purple:#8b5cf6;
+  --radius:12px;--radius-sm:8px;--radius-xs:5px;
+}
+[data-theme=light]{
+  --bg:#f1f2f8;--bg-card:#ffffff;--bg-surface:#f8f9ff;--bg-hover:#eceeff;
+  --border:rgba(0,0,80,0.09);--border-hi:rgba(79,142,255,0.4);
+  --text:#1a1a38;--muted:#5a5a80;--dim:#aaaacc;
+}
+html,body{height:auto!important;overflow-y:auto!important;display:block!important}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+body.in-iframe .topbar{display:none!important}
 
-        body.in-iframe {
-            background-color: transparent !important;
-            padding: 12px 0 0 0 !important;
-            min-height: auto;
-        }
+/* ─── Layout ─── */
+.topbar{
+  position:sticky;top:0;z-index:200;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 24px;
+  background:rgba(4,4,10,0.88);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+}
+[data-theme=light] .topbar{background:rgba(241,242,248,0.9)}
+.topbar-left{display:flex;align-items:center;gap:14px}
+.logo-pill{
+  display:flex;align-items:center;gap:8px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff;font-weight:700;font-size:13px;padding:6px 14px;border-radius:20px;
+}
+.topbar h1{font-size:15px;font-weight:700;letter-spacing:0.3px}
+.topbar-right{display:flex;gap:10px;align-items:center}
+.admin-who{font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace}
 
-        body.in-iframe .admin-header {
-            display: none !important;
-        }
-        
-        .admin-container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        
-        .admin-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
-        }
-        
-        .admin-header h1 {
-            font-size: 24px;
-            font-weight: 600;
-            color: var(--accent-color, #ffffff);
-        }
-        
-        .back-link {
-            color: var(--text-primary);
-            text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            background: var(--bg-surface);
-            border: 1px solid var(--border-color);
-            transition: all 0.2s;
-            font-size: 13px;
-        }
-        
-        .back-link:hover {
-            opacity: 0.9;
-            transform: translateY(-1px);
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-        
-        .stat-card {
-            background: var(--bg-card, #09090b);
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-            text-align: center;
-            transition: all 0.25s ease;
-            box-shadow: var(--shadow-sm);
-        }
-        
-        .stat-card:hover {
-            border-color: var(--accent-color, #ffffff);
-            transform: translateY(-2px);
-        }
-        
-        .stat-card h3 {
-            color: var(--text-secondary, #a1a1aa);
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            margin-bottom: 10px;
-        }
-        
-        .stat-card .value {
-            font-size: 32px;
-            font-weight: 700;
-            color: var(--accent-color, #ffffff);
-        }
-        
-        .section-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 16px;
-            margin-top: 24px;
-            color: var(--text-primary);
-        }
-        
-        .code-creator {
-            background: var(--bg-card, #09090b);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 24px;
-            border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-        }
-        
-        .code-creator h3 {
-            margin-bottom: 16px;
-            font-size: 15px;
-            font-weight: 600;
-        }
-        
-        .code-form {
-            display: flex;
-            gap: 12px;
-            align-items: flex-end;
-            flex-wrap: wrap;
-        }
-        
-        .form-group {
-            flex: 1;
-            min-width: 150px;
-        }
-        
-        .form-group label {
-            display: block;
-            font-size: 11px;
-            color: var(--text-secondary, #a1a1aa);
-            margin-bottom: 6px;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
-        
-        .form-group select, .form-group input {
-            width: 100%;
-            padding: 10px 14px;
-            background: var(--bg-surface, #18181b);
-            border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-            border-radius: 8px;
-            color: var(--text-primary, #ffffff);
-            font-size: 13px;
-        }
-        
-        .form-group select:focus, .form-group input:focus {
-            outline: none;
-            border-color: var(--accent-color, #ffffff);
-        }
-        
-        .btn-primary {
-            background: var(--accent-color, #ffffff) !important;
-            color: var(--accent-text-color, #000000) !important;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-size: 13px;
-        }
-        
-        .btn-primary:hover {
-            opacity: 0.9;
-            transform: translateY(-1px);
-        }
-        
-        .btn-danger {
-            background: #ef4444;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            color: white;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .btn-danger:hover {
-            background: #dc2626;
-        }
-        
-        .btn-success {
-            background: #10b981;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            color: white;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .btn-success:hover {
-            background: #059669;
-        }
-        
-        .generated-code {
-            margin-top: 16px;
-            padding: 16px;
-            background: var(--bg-surface, #18181b);
-            border-radius: 8px;
-            border: 1px solid var(--accent-color, #ffffff);
-            display: none;
-        }
-        
-        .generated-code.show {
-            display: block;
-        }
-        
-        .generated-code code {
-            font-family: monospace;
-            font-size: 15px;
-            color: var(--text-primary);
-            background: rgba(255,255,255,0.06);
-            padding: 4px 8px;
-            border-radius: 4px;
-            word-break: break-all;
-        }
-        
-        .table-wrapper {
-            overflow-x: auto;
-            border-radius: 12px;
-            border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-            background: var(--bg-card, #09090b);
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        th, td {
-            padding: 12px 14px;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
-            font-size: 13px;
-        }
-        
-        th {
-            background: var(--bg-surface, #18181b);
-            color: var(--text-secondary, #a1a1aa);
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        tr:hover {
-            background: rgba(255, 255, 255, 0.02);
-        }
-        
-        .plan-select {
-            background: var(--bg-surface, #18181b);
-            color: var(--text-primary, #ffffff);
-            border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-            padding: 6px 10px;
-            border-radius: 6px;
-            font-size: 12px;
-            outline: none;
-        }
-        
-        .btn-update {
-            background: var(--accent-color, #ffffff);
-            color: var(--accent-text-color, #000000);
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 12px;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-        
-        .btn-update:hover {
-            opacity: 0.9;
-        }
-        
-        .admin-badge {
-            display: inline-block;
-            background: #10b981;
-            color: white;
-            font-size: 10px;
-            padding: 2px 8px;
-            border-radius: 20px;
-            font-weight: 600;
-        }
-        
-        .free-badge {
-            display: inline-block;
-            background: var(--text-muted, #52525b);
-            color: white;
-            font-size: 10px;
-            padding: 2px 8px;
-            border-radius: 20px;
-            font-weight: 600;
-        }
-        
-        .pro-badge {
-            display: inline-block;
-            background: #8b5cf6;
-            color: white;
-            font-size: 10px;
-            padding: 2px 8px;
-            border-radius: 20px;
-            font-weight: 600;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: var(--text-secondary);
-        }
-        
-        .status-message {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 12px 20px;
-            border-radius: 8px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-            z-index: 1000;
-            transition: opacity 0.3s;
-        }
-        
-        .status-message.success {
-            border-color: #10b981;
-            color: #10b981;
-        }
-        
-        .status-message.error {
-            border-color: #ef4444;
-            color: #ef4444;
-        }
-        
-        .refresh-btn {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-color);
-            padding: 8px 16px;
-            border-radius: 8px;
-            color: var(--text-primary);
-            cursor: pointer;
-            margin-left: 10px;
-            font-size: 13px;
-            transition: all 0.2s;
-        }
-        
-        .refresh-btn:hover {
-            background: var(--border-color);
-        }
-        
-        .filter-bar {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            align-items: center;
-        }
-        
-        .search-input {
-            flex: 1;
-            padding: 8px 14px;
-            background: var(--bg-surface);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 13px;
-            outline: none;
-        }
+/* Nav tabs */
+.nav{
+  display:flex;gap:2px;padding:0 24px;
+  background:var(--bg-card);border-bottom:1px solid var(--border);
+  overflow-x:auto;flex-shrink:0;
+}
+.nav::-webkit-scrollbar{height:3px}
+.nav::-webkit-scrollbar-thumb{background:var(--border-hi);border-radius:2px}
+.nav-tab{
+  display:flex;align-items:center;gap:7px;padding:12px 16px;
+  font-size:12px;font-weight:600;color:var(--muted);
+  border:none;background:none;cursor:pointer;
+  border-bottom:2px solid transparent;white-space:nowrap;transition:all 0.18s;
+}
+.nav-tab:hover{color:var(--text);background:var(--bg-hover)}
+.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-badge{
+  background:var(--accent);color:#fff;font-size:9px;
+  padding:1px 6px;border-radius:10px;font-weight:700;
+}
 
-        .search-input:focus {
-            border-color: var(--accent-color);
-        }
-        
-        .stats-detail {
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin-top: 6px;
-        }
-        
-        .action-buttons {
-            display: flex;
-            gap: 5px;
-            flex-wrap: wrap;
-        }
-    </style>
-    <script>
-        // Apply parent theme immediately before rendering
-        try {
-            const theme = localStorage.getItem('aura_theme') || 'dark';
-            document.documentElement.setAttribute('data-theme', theme);
-        } catch(e) { console.error('Failed to load parent theme', e); }
+.content{padding:24px;max-width:1500px;margin:0 auto}
+.panel-section{display:none}
+.panel-section.active{display:block}
 
-        // Set iframe state on body load
-        if (window.self !== window.top) {
-            document.addEventListener('DOMContentLoaded', () => {
-                document.body.classList.add('in-iframe');
-            });
-        }
-    </script>
+/* ─── Cards ─── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
+.stat-card{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px 16px;position:relative;overflow:hidden;transition:all 0.2s;cursor:default;
+}
+.stat-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,var(--glow),transparent);opacity:0;transition:opacity 0.2s}
+.stat-card:hover{border-color:var(--border-hi);transform:translateY(-2px)}
+.stat-card:hover::before{opacity:1}
+.stat-card .lbl{font-size:10px;text-transform:uppercase;letter-spacing:0.7px;color:var(--muted);font-weight:600;margin-bottom:6px}
+.stat-card .val{font-size:28px;font-weight:800;color:var(--accent);line-height:1}
+.stat-card .sub{font-size:10px;color:var(--dim);margin-top:5px}
+
+/* ─── Toolbar ─── */
+.toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.search-box{position:relative;flex:1;min-width:180px}
+.search-box input{padding-left:34px;width:100%}
+.search-box .si{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
+
+/* ─── Form controls ─── */
+input,select,textarea{
+  background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);
+  color:var(--text);font-size:13px;font-family:inherit;padding:9px 12px;
+  outline:none;transition:border-color 0.18s;width:100%;
+}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:120px;font-family:'JetBrains Mono',monospace;font-size:12px}
+label.lbl{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;font-weight:600;margin-bottom:5px}
+.field{display:flex;flex-direction:column;gap:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.full{grid-column:1/-1}
+
+/* ─── Buttons ─── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.18s;border:none;font-family:inherit}
+.btn-ghost{background:var(--bg-surface);border:1px solid var(--border);color:var(--text)}
+.btn-ghost:hover{border-color:var(--border-hi);background:var(--bg-hover)}
+.btn-pri{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn-pri:hover{opacity:0.88;transform:translateY(-1px);box-shadow:0 4px 16px var(--glow)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-danger:hover{opacity:0.85}
+.btn-success{background:var(--green);color:#fff}
+.btn-success:hover{opacity:0.85}
+.btn-warn{background:var(--orange);color:#fff}
+.btn-warn:hover{opacity:0.85}
+.btn-sm{padding:5px 10px;font-size:11px;border-radius:6px}
+.btn-xs{padding:3px 8px;font-size:10px;border-radius:5px}
+
+/* ─── Table ─── */
+.tbl-wrap{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:600px}
+th{background:var(--bg-surface);color:var(--muted);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;padding:11px 12px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:10px 12px;font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--bg-hover)}
+
+/* ─── Badges ─── */
+.badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:600;padding:2px 8px;border-radius:12px}
+.b-free{background:rgba(100,100,130,0.2);color:var(--muted)}
+.b-pro{background:rgba(139,92,246,0.18);color:var(--purple);border:1px solid rgba(139,92,246,0.3)}
+.b-admin{background:rgba(16,185,129,0.18);color:var(--green);border:1px solid rgba(16,185,129,0.3)}
+.b-banned{background:rgba(239,68,68,0.18);color:var(--red);border:1px solid rgba(239,68,68,0.3)}
+.b-dark{background:rgba(79,142,255,0.12);color:var(--accent);border:1px solid rgba(79,142,255,0.25)}
+.b-light{background:rgba(245,158,11,0.12);color:var(--orange);border:1px solid rgba(245,158,11,0.25)}
+
+.mono{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.mono:hover{color:var(--text)}
+
+/* Panel card */
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;margin-bottom:16px}
+.card-title{font-size:14px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.card-title span{display:flex;align-items:center;gap:8px}
+
+/* Toggle switch */
+.toggle{position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:var(--dim);border-radius:22px;cursor:pointer;transition:0.3s}
+.slider::before{content:'';position:absolute;height:16px;width:16px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:0.3s}
+input:checked+.slider{background:var(--accent)}
+input:checked+.slider::before{transform:translateX(18px)}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+.toggle-row:last-child{border-bottom:none}
+.toggle-row .info{flex:1}
+.toggle-row .info strong{font-size:13px;font-weight:600;display:block}
+.toggle-row .info small{font-size:11px;color:var(--muted)}
+
+/* Analytics */
+.chart-box{background:var(--bg-surface);border-radius:var(--radius-sm);padding:16px;min-height:160px;position:relative}
+canvas{max-width:100%;height:auto}
+
+/* Conversation viewer */
+.msg-thread{display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow-y:auto;padding:4px 0}
+.msg-bubble{padding:10px 14px;border-radius:var(--radius-sm);max-width:85%;font-size:12px;line-height:1.6}
+.msg-user{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;align-self:flex-end;border-radius:12px 12px 2px 12px}
+.msg-ai{background:var(--bg-surface);border:1px solid var(--border);align-self:flex-start;border-radius:12px 12px 12px 2px}
+.msg-meta{font-size:10px;color:var(--muted);margin-bottom:3px}
+
+/* Security events */
+.event-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border)}
+.event-row:last-child{border-bottom:none}
+.event-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-red{background:var(--red);box-shadow:0 0 6px var(--red)}
+.dot-orange{background:var(--orange);box-shadow:0 0 6px var(--orange)}
+.dot-green{background:var(--green)}
+
+/* Modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+.overlay.open{display:flex}
+.modal{background:var(--bg-card);border:1px solid var(--border-hi);border-radius:16px;padding:26px;width:100%;max-width:540px;box-shadow:0 20px 60px rgba(0,0,0,0.6);animation:up 0.22s ease}
+@keyframes up{from{transform:translateY(18px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.modal-hdr h2{font-size:16px;font-weight:700}
+.modal-x{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1;padding:0 4px}
+.modal-x:hover{color:var(--text)}
+.modal-foot{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+.sep{height:1px;background:var(--border);margin:12px 0}
+
+/* Toast */
+.toast{position:fixed;bottom:22px;right:22px;padding:11px 18px;border-radius:10px;background:var(--bg-card);border:1px solid var(--border);color:var(--text);font-size:12px;font-weight:500;z-index:9999;display:none;box-shadow:0 8px 24px rgba(0,0,0,0.5)}
+.toast.ok{border-color:var(--green);color:var(--green)}
+.toast.err{border-color:var(--red);color:var(--red)}
+
+/* Source chip */
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg-surface);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:500}
+.chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;padding:0}
+.chip button:hover{color:var(--red)}
+.chips-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-thumb{background:var(--dim);border-radius:3px}
+
+select{cursor:pointer}
+</style>
+<script>
+try{document.documentElement.setAttribute('data-theme',localStorage.getItem('aura_theme')||'dark')}catch(e){}
+if(window.self!==window.top){document.addEventListener('DOMContentLoaded',()=>document.body.classList.add('in-iframe'))}
+</script>
 </head>
 <body>
-    <div class="admin-container">
-        <div class="admin-header">
-            <h1>⚖️ Lögvist Stjórnborð</h1>
-            <div>
-                <button class="refresh-btn" onclick="loadData()">🔄 Uppfæra</button>
-                <a href="/" class="back-link">← Aftur á forsíðu</a>
-            </div>
-        </div>
 
-        <!-- Stats Cards -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <h3>👥 Heildarfjöldi Notenda</h3>
-                <div class="value" id="stat-users">—</div>
-                <div class="stats-detail" id="stat-users-detail">Notendur í gagnagrunni</div>
-            </div>
-            <div class="stat-card">
-                <h3>💬 Fjöldi Samtala</h3>
-                <div class="value" id="stat-chats">—</div>
-                <div class="stats-detail">Samtöl stofnuð samtals</div>
-            </div>
-            <div class="stat-card">
-                <h3>⭐ Greiddar Áskriftir</h3>
-                <div class="value" id="stat-paid">—</div>
-                <div class="stats-detail" id="stat-paid-detail">Pro áskrifendur</div>
-            </div>
-            <div class="stat-card">
-                <h3>🌐 Heimsóknir á Vefinn</h3>
-                <div class="value" id="stat-visits">—</div>
-                <div class="stats-detail">Veftraffík (heildarflettingar)</div>
-            </div>
-            <div class="stat-card">
-                <h3>🤖 Spurt Gervigreind</h3>
-                <div class="value" id="stat-questions">—</div>
-                <div class="stats-detail">Fyrirspurnir frá notendum</div>
-            </div>
-            <div class="stat-card">
-                <h3>✉️ Skilaboð í Heild</h3>
-                <div class="value" id="stat-messages">—</div>
-                <div class="stats-detail">Heildarskilaboð (notandi + AI)</div>
-            </div>
-        </div>
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo-pill">⚖️ Lögvist</div>
+    <h1>Core Admin Control System</h1>
+  </div>
+  <div class="topbar-right">
+    <span class="admin-who" id="admin-who">admin</span>
+    <button class="btn btn-ghost btn-sm" onclick="loadAll()">🔄</button>
+    <a href="/" class="btn btn-ghost btn-sm">← Forsíða</a>
+  </div>
+</div>
 
-        <!-- Code Creator -->
-        <div class="code-creator">
-            <h3>🔑 Búa til innlausnarkóða</h3>
-            <div class="code-form">
-                <div class="form-group">
-                    <label>Áskriftarplan</label>
-                    <select id="code-plan">
-                        <option value="pro">⭐ PRO (2.290 ISK/mán)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Fjöldi nota</label>
-                    <input type="number" id="code-max-uses" value="1" min="1" max="100">
-                </div>
-                <button class="btn-primary" id="create-code-btn">✨ Búa til kóða</button>
-            </div>
-            <div id="generated-code" class="generated-code">
-                <strong>✅ Nýr kóði búinn til:</strong><br>
-                <code id="code-value"></code>
-                <div style="margin-top: 12px; display: flex; gap: 10px;">
-                    <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="copyCode()">📋 Afrita</button>
-                    <button class="btn-success" style="padding: 6px 12px; font-size: 12px;" onclick="downloadCodes()">💾 Vista kóða</button>
-                </div>
-            </div>
-        </div>
+<!-- Navigation Tabs -->
+<div class="nav" id="nav">
+  <button class="nav-tab active" data-tab="dashboard">📊 Dashboard</button>
+  <button class="nav-tab" data-tab="users">👥 Notendur</button>
+  <button class="nav-tab" data-tab="ai">🤖 AI Stjórn</button>
+  <button class="nav-tab" data-tab="conversations">💬 Samtöl</button>
+  <button class="nav-tab" data-tab="analytics">📈 Greiningar</button>
+  <button class="nav-tab" data-tab="security">🔐 Öryggi</button>
+  <button class="nav-tab" data-tab="codes">🔑 Kóðar & Plan</button>
+</div>
 
-        <!-- Filter Bar -->
-        <div class="filter-bar">
-            <input type="text" id="search-users" class="search-input" placeholder="🔍 Leita að notanda..." onkeyup="filterUsers()">
-            <select id="filter-plan" class="plan-select" onchange="filterUsers()">
-                <option value="all">📋 Allir notendur</option>
-                <option value="free">🎁 Ókeypis</option>
-                <option value="pro">⭐ Pro áskrift</option>
-                <option value="admin">👑 Stjórnendur</option>
-            </select>
-        </div>
+<div class="content">
 
-        <!-- Users Table -->
-        <h2 class="section-title">📋 Notendastjórnun</h2>
-        <div class="table-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Notendanafn</th>
-                        <th>Skráning</th>
-                        <th>Áskrift</th>
-                        <th>Spurningar eftir</th>
-                        <th>Stjórnandi</th>
-                        <th>Aðgerðir</th>
-                    </tr>
-                </thead>
-                <tbody id="users-table">
-                    <tr><td colspan="6" class="loading">⏳ Hleð gögnum...</td></tr>
-                </tbody>
-            </table>
+<!-- ══ TAB: DASHBOARD ══ -->
+<section class="panel-section active" id="tab-dashboard">
+  <div class="stats-grid">
+    <div class="stat-card"><div class="lbl">👥 Notendur</div><div class="val" id="s-users">—</div><div class="sub" id="s-users-sub">—</div></div>
+    <div class="stat-card"><div class="lbl">💬 Samtöl</div><div class="val" id="s-chats">—</div><div class="sub">Stofnuð samtöl</div></div>
+    <div class="stat-card"><div class="lbl">✉️ Skilaboð</div><div class="val" id="s-msgs">—</div><div class="sub">Heildarfjöldi</div></div>
+    <div class="stat-card"><div class="lbl">⭐ Pro</div><div class="val" id="s-paid">—</div><div class="sub">Greiddir notendur</div></div>
+    <div class="stat-card"><div class="lbl">🌐 Heimsóknir</div><div class="val" id="s-visits">—</div><div class="sub">Veftraffík</div></div>
+    <div class="stat-card"><div class="lbl">🤖 Fyrirspurnir</div><div class="val" id="s-q">—</div><div class="sub">Til AI</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span>📅 Skilaboð á dag (30 dagar)</span></div>
+      <div class="chart-box"><canvas id="chart-daily" height="120"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>👑 Virkustu notendur</span></div>
+      <div id="top-users-list"></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span>📊 Dreifing áskrifta</span></div>
+      <div class="chart-box"><canvas id="chart-plans" height="120"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>🆕 Nýir notendur (7 dagar)</span></div>
+      <div class="chart-box"><canvas id="chart-newusers" height="120"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ TAB: USERS ══ -->
+<section class="panel-section" id="tab-users">
+  <div class="toolbar">
+    <div class="search-box">
+      <span class="si">🔍</span>
+      <input type="text" id="user-search" placeholder="Leita að notanda..." oninput="filterUsers()">
+    </div>
+    <select id="user-filter-plan" style="width:auto" onchange="filterUsers()">
+      <option value="all">📋 Allir</option>
+      <option value="free">🎁 Ókeypis</option>
+      <option value="pro">⭐ Pro</option>
+      <option value="admin">👑 Admin</option>
+      <option value="banned">🚫 Bannaðir</option>
+    </select>
+    <select id="user-sort" style="width:auto" onchange="filterUsers()">
+      <option value="joined_desc">↓ Nýjastir</option>
+      <option value="joined_asc">↑ Elstir</option>
+      <option value="name">A–Z</option>
+      <option value="msgs">Flest skilaboð</option>
+    </select>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:10px" id="user-count"></div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th>Notandi</th><th>Lykilorð (hash)</th><th>Áskrift</th><th>Þema</th>
+        <th>Skilaboð</th><th>Admin</th><th>Ban</th><th>Innskráning</th><th>Skráning</th><th>Aðgerðir</th>
+      </tr></thead>
+      <tbody id="users-tbody"><tr><td colspan="10" style="text-align:center;padding:30px;color:var(--muted)">⏳ Hleð...</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ══ TAB: AI CONTROL ══ -->
+<section class="panel-section" id="tab-ai">
+  <div class="grid2">
+    <div>
+      <div class="card">
+        <div class="card-title"><span>📝 Kerfisboð (System Prompt)</span><button class="btn btn-pri btn-sm" onclick="saveSystemPrompt()">💾 Vista</button></div>
+        <div class="field">
+          <label class="lbl">Lifandi system prompt — breytingar taka gildi strax</label>
+          <textarea id="sys-prompt" style="min-height:220px" placeholder="Sláðu inn system prompt..."></textarea>
         </div>
-        
-        <!-- Stats Footer -->
-        <div style="margin-top: 24px; padding: 16px; background: #18181b; border-radius: 12px; text-align: center; font-size: 12px; color: #a1a1aa;">
-            <p>📊 Samtals notendur: <span id="footer-total-users">0</span> | 🎁 Ókeypis: <span id="footer-free-users">0</span> | ⭐ Pro: <span id="footer-pro-users">0</span> | 👑 Stjórnendur: <span id="footer-admin-users">0</span></p>
+        <div style="margin-top:10px;font-size:11px;color:var(--muted)" id="sys-prompt-chars">0 stafir</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span>🌐 Traustar heimildir</span><button class="btn btn-ghost btn-sm" onclick="addSource()">+ Bæta við</button></div>
+        <div class="chips-row" id="trusted-sources"></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <input type="text" id="new-source" placeholder="t.d. althingi.is" style="flex:1">
+          <button class="btn btn-ghost btn-sm" onclick="addSource()">Bæta við</button>
         </div>
+      </div>
     </div>
 
-    <div id="status-message" class="status-message" style="display: none;"></div>
+    <div>
+      <div class="card">
+        <div class="card-title"><span>⚙️ AI Stillingar</span><button class="btn btn-pri btn-sm" onclick="saveAISettings()">💾 Vista allt</button></div>
 
-    <script>
-        let currentCode = '';
-        let allUsers = [];
+        <div class="toggle-row">
+          <div class="info"><strong>🔬 Deep Research Mode</strong><small>Notar Qwen3 32B fyrir ítarlegar rannsóknir</small></div>
+          <label class="toggle"><input type="checkbox" id="ai-deep-research"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="info"><strong>⚖️ Legal Reasoning Mode</strong><small>Sérsniðnar lögfræðilegar rökstuðningar</small></div>
+          <label class="toggle"><input type="checkbox" id="ai-legal-mode" checked><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="info"><strong>🚫 Banna íslensku ekki</strong><small>AI svarar bara á íslensku</small></div>
+          <label class="toggle"><input type="checkbox" id="ai-icelandic-only" checked><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="info"><strong>🛡️ Strict Citation Mode</strong><small>Aðeins staðfestar heimildir</small></div>
+          <label class="toggle"><input type="checkbox" id="ai-strict-cite"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="info"><strong>🧪 Beta/Relaxed Mode</strong><small>Leyfir tilraunasvör</small></div>
+          <label class="toggle"><input type="checkbox" id="ai-beta-mode"><span class="slider"></span></label>
+        </div>
 
-        async function loadData() {
-            try {
-                // Load stats
-                const statsRes = await fetch('/api/admin/stats');
-                if (statsRes.ok) {
-                    const stats = await statsRes.json();
-                    document.getElementById('stat-users').textContent = stats.users || 0;
-                    document.getElementById('stat-users-detail').textContent = `Skráðir: ${stats.registered || 0} | Gestir: ${stats.guests || 0}`;
-                    document.getElementById('stat-chats').textContent = stats.chats || 0;
-                    document.getElementById('stat-paid').textContent = stats.paid || 0;
-                    document.getElementById('stat-paid-detail').textContent = `${stats.paid || 0} notendur með Pro`;
-                    
-                    document.getElementById('stat-visits').textContent = stats.visits || 0;
-                    document.getElementById('stat-questions').textContent = stats.questions || 0;
-                    document.getElementById('stat-messages').textContent = stats.messages || 0;
-                }
+        <div class="sep"></div>
+        <div class="field" style="margin-bottom:12px">
+          <label class="lbl">Tilvísunarstig (Citation Strictness)</label>
+          <select id="ai-cite-level">
+            <option value="strict">🔒 Strict — aðeins staðfestar heimildir</option>
+            <option value="balanced" selected>⚖️ Balanced — meðallag</option>
+            <option value="relaxed">🧪 Relaxed — beta/prófun</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="lbl">Sjálfgefið AI líkan</label>
+          <select id="ai-default-model">
+            <option value="llama-4-scout">⚡ Llama 4 Scout (hraður)</option>
+            <option value="qwen3-32b" selected>🧠 Qwen3 32B (nákvæmur)</option>
+            <option value="qwen3-coder">💻 Qwen3 Coder</option>
+          </select>
+        </div>
+      </div>
 
-                // Load users
-                const usersRes = await fetch('/api/admin/users');
-                if (usersRes.ok) {
-                    allUsers = await usersRes.json();
-                    filterUsers();
-                    
-                    // Update footer stats
-                    const freeCount = allUsers.filter(u => u.plan === 'free').length;
-                    const proCount = allUsers.filter(u => u.plan === 'pro').length;
-                    const adminCount = allUsers.filter(u => u.is_admin).length;
-                    
-                    document.getElementById('footer-total-users').textContent = allUsers.length;
-                    document.getElementById('footer-free-users').textContent = freeCount;
-                    document.getElementById('footer-pro-users').textContent = proCount;
-                    document.getElementById('footer-admin-users').textContent = adminCount;
-                } else {
-                    const error = await usersRes.json();
-                    showMessage(`❌ Villa: ${error.error || 'Ekki heimild'}`, 'error');
-                }
-            } catch (err) {
-                console.error('Villa við að sækja gögn:', err);
-                showMessage('❌ Villa við að hlaða gögnum', 'error');
-            }
-        }
+      <div class="card">
+        <div class="card-title"><span>📊 Takmarkanir per Plan</span></div>
+        <div id="plan-limits-editor"></div>
+      </div>
+    </div>
+  </div>
+</section>
 
-        function filterUsers() {
-            const searchTerm = document.getElementById('search-users').value.toLowerCase();
-            const planFilter = document.getElementById('filter-plan').value;
-            
-            let filtered = [...allUsers];
-            
-            // Filter by plan
-            if (planFilter === 'free') {
-                filtered = filtered.filter(u => u.plan === 'free');
-            } else if (planFilter === 'pro') {
-                filtered = filtered.filter(u => u.plan === 'pro');
-            } else if (planFilter === 'admin') {
-                filtered = filtered.filter(u => u.is_admin);
-            }
-            
-            // Filter by search
-            if (searchTerm) {
-                filtered = filtered.filter(u => u.username.toLowerCase().includes(searchTerm));
-            }
-            
-            renderUsersTable(filtered);
-        }
+<!-- ══ TAB: CONVERSATIONS ══ -->
+<section class="panel-section" id="tab-conversations">
+  <div class="toolbar">
+    <div class="search-box">
+      <span class="si">🔍</span>
+      <input type="text" id="conv-search" placeholder="Leita eftir notanda..." oninput="filterConversations()">
+    </div>
+    <select id="conv-limit" style="width:auto" onchange="loadConversations()">
+      <option value="50">50 nýjust</option>
+      <option value="100">100 nýjust</option>
+      <option value="250">250 nýjust</option>
+    </select>
+    <button class="btn btn-ghost btn-sm" onclick="loadConversations()">🔄 Uppfæra</button>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Notandi</th><th>Titill</th><th>Skilaboð</th><th>Síðast uppfært</th><th>Aðgerð</th></tr></thead>
+      <tbody id="conv-tbody"><tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted)">⏳ Hleð...</td></tr></tbody>
+    </table>
+  </div>
+</section>
 
-        function renderUsersTable(users) {
-            const tbody = document.getElementById('users-table');
-            
-            if (!users || users.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Engir notendur fundnir</td></tr>';
-                return;
-            }
-            
-            tbody.innerHTML = '';
-            
-            users.forEach(u => {
-                const tr = document.createElement('tr');
-                const joinedDate = u.joined ? new Date(u.joined).toLocaleDateString('is-IS') : 'N/A';
-                
-                let planBadge = '';
-                if (u.plan === 'free') planBadge = '<span class="free-badge">🎁 Ókeypis</span>';
-                else if (u.plan === 'pro') planBadge = '<span class="pro-badge">⭐ Pro</span>';
-                else planBadge = '<span class="free-badge">🎁 Ókeypis</span>';
-                
-                const msgCredits = u.msg_credits === -1 ? '∞' : u.msg_credits;
-                
-                tr.innerHTML = `
-                    <td style="font-weight: 500;">${escapeHtml(u.username)}</td>
-                    <td>${joinedDate}</td>
-                    <td>
-                        <select class="plan-select" id="plan-${escapeHtml(u.username)}" style="width: 100px;">
-                            <option value="free" ${u.plan === 'free' ? 'selected' : ''}>🎁 Ókeypis</option>
-                            <option value="pro" ${u.plan === 'pro' ? 'selected' : ''}>⭐ Pro</option>
-                        </select>
-                        <div style="margin-top: 4px;">${planBadge}</div>
-                    </td>
-                    <td><strong>${msgCredits}</strong> eftir</td>
-                    <td>
-                        <input type="checkbox" id="admin-${escapeHtml(u.username)}" ${u.is_admin ? 'checked' : ''}>
-                        ${u.is_admin ? '<span class="admin-badge" style="margin-left: 8px;">Admin</span>' : ''}
-                    </td>
-                    <td class="action-buttons">
-                        <button class="btn-update" onclick="updateUser('${escapeHtml(u.username)}')">💾 Vista</button>
-                        ${u.plan !== 'pro' ? `<button class="btn-success" onclick="givePro('${escapeHtml(u.username)}')">⭐ Gefa Pro</button>` : ''}
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
+<!-- ══ TAB: ANALYTICS ══ -->
+<section class="panel-section" id="tab-analytics">
+  <div class="card">
+    <div class="card-title"><span>📈 Skilaboð á dag — síðustu 30 dagar</span></div>
+    <div class="chart-box"><canvas id="analytics-chart" height="140"></canvas></div>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span>🏆 Virkustu notendur (topp 10)</span></div>
+      <div id="analytics-top-users"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>📊 Áskriftarhlutfall</span></div>
+      <div class="chart-box"><canvas id="analytics-plans" height="140"></canvas></div>
+    </div>
+  </div>
+</section>
 
-        async function updateUser(username) {
-            const planSelect = document.getElementById(`plan-${username}`);
-            const adminCheck = document.getElementById(`admin-${username}`);
-            
-            if (!planSelect || !adminCheck) {
-                showMessage('Villa: Fann ekki stillingar fyrir þennan notanda', 'error');
-                return;
-            }
-            
-            const plan = planSelect.value;
-            const isAdmin = adminCheck.checked;
-            
-            try {
-                const res = await fetch(`/api/admin/user/${encodeURIComponent(username)}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ plan: plan, is_admin: isAdmin })
-                });
-                
-                if (res.ok) {
-                    showMessage(`✅ Upplýsingar fyrir ${username} vistaðar!`, 'success');
-                    loadData(); // Refresh data
-                } else {
-                    const error = await res.json();
-                    showMessage(`❌ Villa: ${error.error || 'Ekki tókst að vista'}`, 'error');
-                }
-            } catch(e) {
-                showMessage('❌ Villa kom upp við vistun', 'error');
-            }
-        }
+<!-- ══ TAB: SECURITY ══ -->
+<section class="panel-section" id="tab-security">
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span>🚫 Bannaðir Notendur</span></div>
+      <div id="banned-list"><div style="color:var(--muted);font-size:12px;padding:10px 0">Engir bannaðir notendur</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>⚡ Rate Limit Atvik</span></div>
+      <div id="rl-list"><div style="color:var(--muted);font-size:12px;padding:10px 0">Engin atvik</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span>📋 Admin Aðgerðarskrá (Audit Log)</span>
+      <select id="audit-limit" style="width:auto" onchange="loadAuditLog()">
+        <option value="50">Síðustu 50</option>
+        <option value="100">Síðustu 100</option>
+        <option value="250">Síðustu 250</option>
+      </select>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Admin</th><th>Aðgerð</th><th>Markmið</th><th>Upplýsingar</th><th>Tími</th></tr></thead>
+        <tbody id="audit-tbody"><tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">⏳ Hleð...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</section>
 
-        async function givePro(username) {
-            try {
-                const res = await fetch(`/api/admin/user/${encodeURIComponent(username)}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ plan: 'pro', is_admin: false })
-                });
-                
-                if (res.ok) {
-                    showMessage(`✅ ${username} hefur fengið Pro áskrift!`, 'success');
-                    loadData();
-                } else {
-                    showMessage(`❌ Villa við að uppfæra ${username}`, 'error');
-                }
-            } catch(e) {
-                showMessage('❌ Villa kom upp', 'error');
-            }
-        }
+<!-- ══ TAB: CODES & PLANS ══ -->
+<section class="panel-section" id="tab-codes">
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span>🔑 Búa til kóða</span></div>
+      <div class="field" style="margin-bottom:12px">
+        <label class="lbl">Plan</label>
+        <select id="code-plan">
+          <option value="pro">⭐ Pro</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label class="lbl">Hámarks nota</label>
+        <input type="number" id="code-uses" value="1" min="1" max="100">
+      </div>
+      <button class="btn btn-pri" onclick="createCode()">✨ Búa til kóða</button>
+      <div id="code-result" style="margin-top:14px;display:none;padding:14px;background:var(--bg-surface);border:1px solid var(--accent);border-radius:8px">
+        <strong style="font-size:12px">✅ Nýr kóði:</strong><br>
+        <code id="code-val" style="font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--accent)"></code>
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="copyCode()">📋 Afrita</button>
+        </div>
+      </div>
+    </div>
 
-        async function createCode() {
-            const plan = document.getElementById('code-plan').value;
-            const maxUses = document.getElementById('code-max-uses').value;
-            
-            try {
-                const res = await fetch('/api/admin/create-code', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ plan: plan, max_uses: parseInt(maxUses) })
-                });
-                
-                if (res.ok) {
-                    const data = await res.json();
-                    currentCode = data.code;
-                    document.getElementById('code-value').textContent = currentCode;
-                    document.getElementById('generated-code').classList.add('show');
-                    showMessage(`✅ ${plan.toUpperCase()} kóði búinn til!`, 'success');
-                } else {
-                    const error = await res.json();
-                    showMessage(`❌ Villa: ${error.error || 'Ekki tókst að búa til kóða'}`, 'error');
-                }
-            } catch(e) {
-                showMessage('❌ Villa við að búa til kóða', 'error');
-            }
-        }
+    <div class="card">
+      <div class="card-title"><span>📋 Allir kóðar</span><button class="btn btn-ghost btn-sm" onclick="loadCodes()">🔄</button></div>
+      <div class="tbl-wrap" id="codes-table-wrap">
+        <table>
+          <thead><tr><th>Kóði</th><th>Plan</th><th>Notaður</th><th>Hámark</th><th>Eyða</th></tr></thead>
+          <tbody id="codes-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-        function copyCode() {
-            if (currentCode) {
-                navigator.clipboard.writeText(currentCode);
-                showMessage('📋 Kóði afritaður á klemmuspjald!', 'success');
-            }
-        }
+  <div class="card">
+    <div class="card-title"><span>📐 Plan Takmarkanir</span><button class="btn btn-pri btn-sm" onclick="savePlanLimits()">💾 Vista breytingar</button></div>
+    <div id="plan-limits-table"></div>
+  </div>
+</section>
 
-        function downloadCodes() {
-            const codes = [];
-            const codeElements = document.querySelectorAll('.generated-code code');
-            codeElements.forEach(el => {
-                if (el.textContent) codes.push(el.textContent);
-            });
-            
-            if (codes.length === 0 && currentCode) codes.push(currentCode);
-            
-            if (codes.length > 0) {
-                const blob = new Blob([codes.join('\n')], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `logvist_codes_${new Date().toISOString().slice(0,19)}.txt`;
-                a.click();
-                URL.revokeObjectURL(url);
-                showMessage('💾 Kóðar vistaðir!', 'success');
-            } else {
-                showMessage('❌ Engir kóðar til að vista', 'error');
-            }
-        }
+</div><!-- /content -->
 
-        function showMessage(message, type) {
-            const msgDiv = document.getElementById('status-message');
-            msgDiv.textContent = message;
-            msgDiv.className = `status-message ${type}`;
-            msgDiv.style.display = 'block';
-            
-            setTimeout(() => {
-                msgDiv.style.display = 'none';
-            }, 3000);
-        }
+<!-- ══ MODALS ══ -->
 
-        function escapeHtml(str) {
-            if (!str) return '';
-            return str.replace(/[&<>]/g, function(m) {
-                if (m === '&') return '&amp;';
-                if (m === '<') return '&lt;';
-                if (m === '>') return '&gt;';
-                return m;
-            });
-        }
+<!-- Edit User Modal -->
+<div class="overlay" id="edit-modal">
+<div class="modal">
+  <div class="modal-hdr"><h2>✏️ Breyta notanda</h2><button class="modal-x" onclick="closeModal('edit-modal')">×</button></div>
+  <input type="hidden" id="edit-orig">
+  <div class="grid2" style="gap:12px">
+    <div class="field"><label class="lbl">Notendanafn</label><input id="edit-username"></div>
+    <div class="field"><label class="lbl">Nýtt lykilorð</label><input type="password" id="edit-pw" placeholder="Skilja eftir autt"></div>
+    <div class="field" style="margin-bottom:12px">
+        <label class="lbl">Plan</label>
+        <select id="edit-plan"><option value="free">🎁 Ókeypis</option><option value="pro">⭐ Pro</option></select>
+      </div>
+    <div class="field"><label class="lbl">Þema</label><select id="edit-theme"><option value="dark">🌙 Dökkt</option><option value="light">☀️ Ljóst</option></select></div>
+    <div class="field"><label class="lbl">Skilaboðaeiningar (-1=∞)</label><input type="number" id="edit-credits"></div>
+    <div class="field" style="justify-content:flex-end;padding-top:20px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px">
+        <input type="checkbox" id="edit-admin" style="width:15px;height:15px;accent-color:var(--accent)"> 👑 Stjórnandi
+      </label>
+    </div>
+    <div class="full sep"></div>
+    <div class="full" style="font-size:11px;color:var(--muted)">Lykilorð er geymt sem öruggt bcrypt hash. Nýtt lykilorð þarf að vera sterkt.</div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal('edit-modal')">Hætta við</button><button class="btn btn-pri" onclick="saveEditUser()">💾 Vista</button></div>
+</div>
+</div>
 
-        // Event listeners
-        document.getElementById('create-code-btn').addEventListener('click', createCode);
-        
-        // Load data on page load
-        loadData();
-        
-        // Auto-refresh every 30 seconds
-        setInterval(loadData, 30000);
+<!-- View Conversation Modal -->
+<div class="overlay" id="conv-modal">
+<div class="modal" style="max-width:660px">
+  <div class="modal-hdr"><h2 id="conv-modal-title">Samtal</h2><button class="modal-x" onclick="closeModal('conv-modal')">×</button></div>
+  <div class="msg-thread" id="conv-thread"></div>
+</div>
+</div>
 
-        // Notify parent of height for iframe resizing
-        function notifyHeight() {
-            const h = document.body.scrollHeight;
-            try { window.parent.postMessage({ type: 'iframeHeight', height: h }, '*'); } catch(e) {}
-        }
-        const ro = new ResizeObserver(notifyHeight);
-        ro.observe(document.body);
-        notifyHeight();
-    </script>
+<!-- Delete Confirm Modal -->
+<div class="overlay" id="del-modal">
+<div class="modal" style="max-width:400px;text-align:center">
+  <div style="font-size:36px;margin-bottom:12px">🗑️</div>
+  <h2 style="margin-bottom:8px">Eyða notanda?</h2>
+  <p style="font-size:12px;color:var(--muted);margin-bottom:20px" id="del-text">Þetta er óafturkræft.</p>
+  <div style="display:flex;gap:10px;justify-content:center">
+    <button class="btn btn-ghost" onclick="closeModal('del-modal')">Hætta við</button>
+    <button class="btn btn-danger" onclick="confirmDelete()">Eyða</button>
+  </div>
+</div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+'use strict';
+
+// ─── State ───
+let allUsers = [];
+let allConvs = [];
+let deleteTarget = '';
+let currentCode = '';
+let aiSettings = {};
+let plans = {};
+let sources = [];
+
+// ─── Tab Navigation ───
+document.getElementById('nav').addEventListener('click', e => {
+  const btn = e.target.closest('.nav-tab');
+  if (!btn) return;
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel-section').forEach(s => s.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  // Lazy load on tab switch
+  if (btn.dataset.tab === 'analytics') loadAnalytics();
+  if (btn.dataset.tab === 'security') loadSecurity();
+  if (btn.dataset.tab === 'codes') loadCodes();
+  if (btn.dataset.tab === 'ai') loadAISettings();
+  if (btn.dataset.tab === 'conversations') loadConversations();
+});
+
+// ─── Load Everything ───
+async function loadAll() {
+  await Promise.all([loadStats(), loadUsers()]);
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch('/api/admin/stats');
+    if (!r.ok) return;
+    const s = await r.json();
+    set('s-users', s.users||0);
+    set('s-users-sub', `Skráðir: ${s.registered||0} | Gestir: ${s.guests||0}`);
+    set('s-chats', s.chats||0);
+    set('s-msgs', s.messages||0);
+    set('s-paid', s.paid||0);
+    set('s-visits', s.visits||0);
+    set('s-q', s.questions||0);
+  } catch(e) {}
+}
+
+async function loadUsers() {
+  try {
+    const r = await fetch('/api/admin/users/full');
+    if (!r.ok) { toast('❌ Ekki hægt að sækja notendur', 'err'); return; }
+    allUsers = await r.json();
+    filterUsers();
+    renderDashboardTopUsers();
+  } catch(e) { toast('❌ Villa við að sækja notendur', 'err'); }
+}
+
+function filterUsers() {
+  const q = (document.getElementById('user-search').value||'').toLowerCase();
+  const pf = document.getElementById('user-filter-plan').value;
+  const sort = document.getElementById('user-sort').value;
+  let list = [...allUsers];
+  if (pf === 'free') list = list.filter(u => u.plan === 'free');
+  if (pf === 'pro') list = list.filter(u => u.plan === 'pro');
+  if (pf === 'admin') list = list.filter(u => u.is_admin);
+  if (pf === 'banned') list = list.filter(u => u.is_banned);
+  if (q) list = list.filter(u => u.username.toLowerCase().includes(q));
+  if (sort === 'joined_desc') list.sort((a,b) => (b.joined||'').localeCompare(a.joined||''));
+  if (sort === 'joined_asc') list.sort((a,b) => (a.joined||'').localeCompare(b.joined||''));
+  if (sort === 'name') list.sort((a,b) => a.username.localeCompare(b.username));
+  set('user-count', `Sýni ${list.length} af ${allUsers.length} notendum`);
+  renderUsersTable(list);
+}
+
+function renderUsersTable(users) {
+  const tb = document.getElementById('users-tbody');
+  if (!users.length) { tb.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--muted)">Engir notendur fundnir</td></tr>'; return; }
+  tb.innerHTML = '';
+  users.forEach(u => {
+    const tr = document.createElement('tr');
+    const joined = u.joined ? new Date(u.joined).toLocaleDateString('is-IS') : '—';
+    const lastLogin = u.last_login ? new Date(u.last_login).toLocaleDateString('is-IS') : '—';
+    const credits = u.msg_credits === -1 ? '∞' : (u.msg_credits ?? '—');
+    const init = (u.username||'?')[0].toUpperCase();
+    const pwShort = u.password ? u.password.substring(0,18)+'…' : '—';
+
+    const planBadge = u.plan === 'pro' ? '<span class="badge b-pro">⭐ Pro</span>' : '<span class="badge b-free">🎁 Ókeypis</span>';
+    const adminBadge = u.is_admin ? '<span class="badge b-admin">👑</span>' : '—';
+    const banBadge = u.is_banned ? '<span class="badge b-banned">🚫 Bannað</span>' : '<span style="color:var(--dim);font-size:11px">—</span>';
+    const themeBadge = (u.theme||'dark') === 'light' ? '<span class="badge b-light">☀️</span>' : '<span class="badge b-dark">🌙</span>';
+
+    tr.innerHTML = `
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0">${esc(init)}</div>
+        <div><div style="font-weight:600;font-size:12px">${esc(u.username)}</div><div style="font-size:10px;color:var(--muted)">${u.login_count||0} innskráningar</div></div>
+      </div></td>
+      <td><span class="mono" title="${esc(u.password||'')}" onclick="toggleMono(this,'${esc(u.password||'')}')">${esc(pwShort)}</span></td>
+      <td>${planBadge}</td>
+      <td>${themeBadge}</td>
+      <td><div style="font-size:11px"><div>💬 ${credits} skil.</div><div style="color:var(--muted)">🎙️ ${u.voice_credits??'—'} | 📎 ${u.upload_credits??'—'}</div></div></td>
+      <td>${adminBadge}</td>
+      <td>${banBadge}</td>
+      <td style="color:var(--muted);font-size:10px">${lastLogin}</td>
+      <td style="color:var(--muted);font-size:10px">${joined}</td>
+      <td><div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-xs" onclick='openEditModal(${JSON.stringify(u)})'>✏️ Breyta</button>
+        ${u.is_banned 
+          ? `<button class="btn btn-success btn-xs" onclick="banUser('${esc(u.username)}',false)">✅ Afbanna</button>` 
+          : `<button class="btn btn-warn btn-xs" onclick="banUser('${esc(u.username)}',true)">🚫 Banna</button>`}
+        <button class="btn btn-danger btn-xs" onclick="openDelModal('${esc(u.username)}')">🗑️ Eyða</button>
+      </div></td>`;
+    document.getElementById('users-tbody').appendChild(tr);
+  });
+}
+
+function toggleMono(el, full) {
+  if (el.dataset.shown === '1') { el.textContent = full.substring(0,18)+'…'; el.dataset.shown='0'; }
+  else { el.textContent = full; el.dataset.shown='1'; }
+}
+
+// ─── Edit Modal ───
+function openEditModal(u) {
+  document.getElementById('edit-orig').value = u.username;
+  document.getElementById('edit-username').value = u.username;
+  document.getElementById('edit-pw').value = '';
+  document.getElementById('edit-plan').value = u.plan||'free';
+  document.getElementById('edit-theme').value = u.theme||'dark';
+  document.getElementById('edit-credits').value = u.msg_credits??'';
+  document.getElementById('edit-admin').checked = !!u.is_admin;
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+async function saveEditUser() {
+  const orig = document.getElementById('edit-orig').value;
+  const newU = document.getElementById('edit-username').value.trim();
+  const pw = document.getElementById('edit-pw').value.trim();
+  const plan = document.getElementById('edit-plan').value;
+  const theme = document.getElementById('edit-theme').value;
+  const credits = parseInt(document.getElementById('edit-credits').value);
+  const isAdmin = document.getElementById('edit-admin').checked;
+
+  const body = { plan, is_admin: isAdmin, theme };
+  if (!isNaN(credits)) body.msg_credits = credits;
+  if (pw) body.new_password = pw;
+  if (newU && newU !== orig) body.new_username = newU;
+
+  const r = await apiFetch(`/api/admin/users/${encodeURIComponent(orig)}/update`, 'POST', body);
+  if (r.ok) {
+    toast(`✅ ${orig} uppfærður!`, 'ok');
+    closeModal('edit-modal');
+    loadUsers();
+  } else {
+    const e = await r.json();
+    toast(`❌ ${e.error||'Villa'}`, 'err');
+  }
+}
+
+// ─── Ban/Unban ───
+async function banUser(username, banned) {
+  const r = await apiFetch(`/api/admin/users/${encodeURIComponent(username)}/ban`, 'POST', {banned});
+  if (r.ok) { toast(banned ? `🚫 ${username} bannaður` : `✅ ${username} afbannaður`, 'ok'); loadUsers(); }
+  else toast('❌ Villa', 'err');
+}
+
+// ─── Delete ───
+function openDelModal(username) {
+  deleteTarget = username;
+  document.getElementById('del-text').textContent = `Þetta mun eyða "${username}" og öllum gögnum hans. Óafturkræft.`;
+  document.getElementById('del-modal').classList.add('open');
+}
+async function confirmDelete() {
+  const r = await apiFetch(`/api/admin/users/${encodeURIComponent(deleteTarget)}`, 'DELETE');
+  if (r.ok) { toast(`🗑️ ${deleteTarget} eytt`, 'ok'); closeModal('del-modal'); loadUsers(); }
+  else toast('❌ Villa', 'err');
+}
+
+// ─── Conversations ───
+async function loadConversations() {
+  const limit = document.getElementById('conv-limit').value;
+  const r = await fetch(`/api/admin/conversations?limit=${limit}`);
+  if (!r.ok) return;
+  allConvs = await r.json();
+  filterConversations();
+}
+
+function filterConversations() {
+  const q = (document.getElementById('conv-search').value||'').toLowerCase();
+  const list = q ? allConvs.filter(c => (c.username||'').toLowerCase().includes(q)) : allConvs;
+  const tb = document.getElementById('conv-tbody');
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted)">Engin samtöl</td></tr>'; return; }
+  tb.innerHTML = '';
+  list.forEach(c => {
+    const tr = document.createElement('tr');
+    const updated = c.updated_at ? new Date(c.updated_at).toLocaleDateString('is-IS') : '—';
+    tr.innerHTML = `
+      <td style="font-weight:500">${esc(c.username||'?')}</td>
+      <td>${esc(c.title||'Óþekktur titill')}</td>
+      <td>${c.msg_count||0}</td>
+      <td style="color:var(--muted);font-size:11px">${updated}</td>
+      <td><button class="btn btn-ghost btn-xs" onclick="viewConv('${esc(c.chat_id)}','${esc(c.title||'')}')">👁️ Skoða</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+async function viewConv(chatId, title) {
+  try {
+    const r = await fetch(`/api/admin/conversations/${encodeURIComponent(chatId)}`);
+    if (!r.ok) { toast('❌ Villa við að sækja samtal', 'err'); return; }
+    const data = await r.json();
+    document.getElementById('conv-modal-title').textContent = title || 'Samtal';
+    const thread = document.getElementById('conv-thread');
+    thread.innerHTML = '';
+    const msgs = data.messages || [];
+    if (!msgs.length) {
+      thread.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:20px">Engin skilaboð</div>';
+    } else {
+      msgs.forEach(m => {
+        const isUser = m.role === 'user';
+        const text = m.content || m.text || '';
+        const div = document.createElement('div');
+        div.className = isUser ? 'msg-bubble msg-user' : 'msg-bubble msg-ai';
+        const time = m.created_at ? new Date(m.created_at).toLocaleTimeString('is-IS') : '';
+        div.innerHTML = `<div class="msg-meta">${isUser ? '👤 Notandi' : '🤖 Lögvist AI'} ${time ? '· ' + time : ''}</div>${esc(text).substring(0,1200)}${text.length > 1200 ? '…' : ''}`;
+        thread.appendChild(div);
+      });
+    }
+    document.getElementById('conv-modal').classList.add('open');
+  } catch(e) {
+    toast('❌ Villa: ' + e.message, 'err');
+  }
+}
+
+// ─── AI Settings ───
+async function loadAISettings() {
+  try {
+    const [settR, planR] = await Promise.all([
+      fetch('/api/admin/ai-settings'),
+      fetch('/api/admin/plans')
+    ]);
+    if (settR.ok) {
+      aiSettings = await settR.json();
+      // System prompt
+      const spR = await fetch('/api/admin/system-prompt');
+      if (spR.ok) {
+        const sp = await spR.json();
+        const ta = document.getElementById('sys-prompt');
+        ta.value = sp.system_prompt || '';
+        updateCharCount();
+        ta.addEventListener('input', updateCharCount);
+      }
+      // Toggles
+      setCheck('ai-deep-research', aiSettings['deep_research'] === 'true');
+      setCheck('ai-legal-mode', aiSettings['legal_mode'] !== 'false');
+      setCheck('ai-icelandic-only', aiSettings['icelandic_only'] !== 'false');
+      setCheck('ai-strict-cite', aiSettings['strict_cite'] === 'true');
+      setCheck('ai-beta-mode', aiSettings['beta_mode'] === 'true');
+      const cl = document.getElementById('ai-cite-level');
+      if (aiSettings['cite_level']) cl.value = aiSettings['cite_level'];
+      const dm = document.getElementById('ai-default-model');
+      if (aiSettings['default_model']) dm.value = aiSettings['default_model'];
+      // Sources
+      try { sources = JSON.parse(aiSettings['trusted_sources']||'[]'); } catch { sources = []; }
+      renderSources();
+    }
+    if (planR.ok) {
+      plans = await planR.json();
+      renderPlanLimits('plan-limits-editor');
+    }
+  } catch(e) {}
+}
+
+function updateCharCount() {
+  const ta = document.getElementById('sys-prompt');
+  document.getElementById('sys-prompt-chars').textContent = `${ta.value.length} stafir`;
+}
+
+async function saveSystemPrompt() {
+  const prompt = document.getElementById('sys-prompt').value;
+  const r = await apiFetch('/api/admin/system-prompt', 'POST', {system_prompt: prompt});
+  if (r.ok) toast('✅ System prompt vistað!', 'ok');
+  else toast('❌ Villa', 'err');
+}
+
+async function saveAISettings() {
+  const settings = {
+    deep_research: String(document.getElementById('ai-deep-research').checked),
+    legal_mode: String(document.getElementById('ai-legal-mode').checked),
+    icelandic_only: String(document.getElementById('ai-icelandic-only').checked),
+    strict_cite: String(document.getElementById('ai-strict-cite').checked),
+    beta_mode: String(document.getElementById('ai-beta-mode').checked),
+    cite_level: document.getElementById('ai-cite-level').value,
+    default_model: document.getElementById('ai-default-model').value,
+    trusted_sources: JSON.stringify(sources)
+  };
+  const r = await apiFetch('/api/admin/ai-settings', 'POST', settings);
+  if (r.ok) toast('✅ AI stillingar vistaðar!', 'ok');
+  else toast('❌ Villa', 'err');
+}
+
+function addSource() {
+  const inp = document.getElementById('new-source');
+  const val = inp.value.trim();
+  if (!val) return;
+  if (!sources.includes(val)) { sources.push(val); renderSources(); }
+  inp.value = '';
+}
+
+function removeSource(s) {
+  sources = sources.filter(x => x !== s);
+  renderSources();
+}
+
+function renderSources() {
+  const el = document.getElementById('trusted-sources');
+  el.innerHTML = '';
+  sources.forEach(s => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.innerHTML = `🌐 ${esc(s)} <button onclick="removeSource('${esc(s)}')">×</button>`;
+    el.appendChild(chip);
+  });
+  if (!sources.length) el.innerHTML = '<span style="color:var(--muted);font-size:12px">Engar heimildir skráðar</span>';
+}
+
+function renderPlanLimits(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = '';
+  Object.entries(plans).forEach(([planName, limits]) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 80px 80px 80px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)';
+    row.innerHTML = `
+      <span style="font-weight:600;font-size:12px">${planName === 'pro' ? '⭐' : '🎁'} ${planName}</span>
+      <input type="number" value="${limits.msg_credits||0}" id="pl-msg-${planName}" placeholder="Skilaboð" style="padding:6px;font-size:11px">
+      <input type="number" value="${limits.voice_credits||0}" id="pl-voice-${planName}" placeholder="Rödd" style="padding:6px;font-size:11px">
+      <input type="number" value="${limits.upload_credits||0}" id="pl-upload-${planName}" placeholder="Upload" style="padding:6px;font-size:11px">`;
+    el.appendChild(row);
+  });
+  if (!Object.keys(plans).length) el.innerHTML = '<div style="color:var(--muted);font-size:12px">Engin plan</div>';
+}
+
+async function savePlanLimits() {
+  for (const planName of Object.keys(plans)) {
+    const msg = parseInt(document.getElementById(`pl-msg-${planName}`)?.value||0);
+    const voice = parseInt(document.getElementById(`pl-voice-${planName}`)?.value||0);
+    const upload = parseInt(document.getElementById(`pl-upload-${planName}`)?.value||0);
+    await apiFetch('/api/admin/plans/update', 'POST', {plan: planName, limits: {msg_credits: msg, voice_credits: voice, upload_credits: upload}});
+  }
+  toast('✅ Plan takmarkanir vistaðar!', 'ok');
+  loadAISettings();
+}
+
+// ─── Analytics ───
+let chartInstances = {};
+
+async function loadAnalytics() {
+  try {
+    const r = await fetch('/api/admin/analytics');
+    if (!r.ok) return;
+    const data = await r.json();
+
+    // Daily messages chart
+    drawBarChart('analytics-chart', data.daily_messages.map(d=>d.day), data.daily_messages.map(d=>d.count), 'Skilaboð');
+    drawBarChart('chart-daily', data.daily_messages.map(d=>d.day?.slice(5)), data.daily_messages.map(d=>d.count), 'Skilaboð');
+
+    // New users chart
+    drawBarChart('chart-newusers', data.new_users.map(d=>d.day?.slice(5)), data.new_users.map(d=>d.count), 'Nýir notendur', '#10b981');
+
+    // Plans doughnut
+    drawDoughnut('chart-plans', data.plan_distribution.map(d=>d.plan), data.plan_distribution.map(d=>d.count));
+    drawDoughnut('analytics-plans', data.plan_distribution.map(d=>d.plan), data.plan_distribution.map(d=>d.count));
+
+    // Top users
+    const topEl = document.getElementById('analytics-top-users');
+    const dashEl = document.getElementById('top-users-list');
+    const topHtml = (data.top_users||[]).map((u,i) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:12px;font-weight:500">${i+1}. ${esc(u.username)}</span>
+        <span style="font-size:11px;color:var(--accent);font-weight:700">${u.msg_count}</span>
+      </div>`).join('') || '<div style="color:var(--muted);font-size:12px">Engin gögn</div>';
+    if (topEl) topEl.innerHTML = topHtml;
+    if (dashEl) dashEl.innerHTML = topHtml;
+  } catch(e) {}
+}
+
+function drawBarChart(id, labels, data, label, color='#4f8eff') {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  if (chartInstances[id]) chartInstances[id].destroy();
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  chartInstances[id] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{label, data, backgroundColor: color+'55', borderColor: color, borderWidth: 1.5, borderRadius: 4}]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {legend: {display: false}},
+      scales: {
+        x: {ticks: {color: isDark?'#6b6b90':'#5a5a80', font:{size:9}}, grid: {color: isDark?'rgba(80,80,180,0.08)':'rgba(0,0,80,0.06)'}},
+        y: {ticks: {color: isDark?'#6b6b90':'#5a5a80', font:{size:9}}, grid: {color: isDark?'rgba(80,80,180,0.08)':'rgba(0,0,80,0.06)'}}
+      }
+    }
+  });
+}
+
+function drawDoughnut(id, labels, data) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  if (chartInstances[id]) chartInstances[id].destroy();
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  chartInstances[id] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{data, backgroundColor: ['#4f8eff','#8b5cf6','#10b981','#f59e0b'], borderColor: 'transparent'}]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {legend: {position:'right', labels: {color: isDark?'#e2e2f0':'#1a1a38', font:{size:10}, padding:8}}}
+    }
+  });
+}
+
+// ─── Security ───
+async function loadSecurity() {
+  try {
+    const r = await fetch('/api/admin/security');
+    if (!r.ok) return;
+    const data = await r.json();
+
+    const banEl = document.getElementById('banned-list');
+    if (data.banned_users?.length) {
+      banEl.innerHTML = data.banned_users.map(u => `
+        <div class="event-row">
+          <div class="event-dot dot-red"></div>
+          <div style="flex:1"><span style="font-size:12px;font-weight:500">${esc(u.username)}</span></div>
+          <button class="btn btn-success btn-xs" onclick="banUser('${esc(u.username)}',false)">✅ Afbanna</button>
+        </div>`).join('');
+    } else {
+      banEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:10px 0">Engir bannaðir notendur 🎉</div>';
+    }
+
+    const rlEl = document.getElementById('rl-list');
+    if (data.rate_limit_events?.length) {
+      rlEl.innerHTML = data.rate_limit_events.map(e => `
+        <div class="event-row">
+          <div class="event-dot dot-orange"></div>
+          <span style="font-size:12px;flex:1">${esc(e.username)}</span>
+          <span class="badge b-pro" style="font-size:10px">${e.recent_requests} beiðnir</span>
+        </div>`).join('');
+    } else {
+      rlEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:10px 0">Engin rate limit atvik 🎉</div>';
+    }
+  } catch(e) {}
+  await loadAuditLog();
+}
+
+async function loadAuditLog() {
+  const limit = document.getElementById('audit-limit').value;
+  const r = await fetch(`/api/admin/audit-log?limit=${limit}`);
+  if (!r.ok) return;
+  const rows = await r.json();
+  const tb = document.getElementById('audit-tbody');
+  if (!rows.length) { tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">Engar aðgerðir skráðar</td></tr>'; return; }
+  tb.innerHTML = rows.map(r => `
+    <tr>
+      <td style="color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:10px">${r.id}</td>
+      <td style="font-weight:500">${esc(r.admin_user||'—')}</td>
+      <td><span class="badge b-dark">${esc(r.action||'—')}</span></td>
+      <td style="font-size:11px">${esc(r.target||'—')}</td>
+      <td style="font-size:11px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.details||'—')}</td>
+      <td style="font-size:10px;color:var(--muted)">${r.timestamp ? new Date(r.timestamp).toLocaleString('is-IS') : '—'}</td>
+    </tr>`).join('');
+}
+
+// ─── Codes ───
+async function loadCodes() {
+  const r = await fetch('/api/admin/codes');
+  if (!r.ok) return;
+  const codes = await r.json();
+  const tb = document.getElementById('codes-tbody');
+  const entries = Object.entries(codes);
+  if (!entries.length) { tb.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Engir kóðar</td></tr>'; return; }
+  tb.innerHTML = entries.map(([code, info]) => `
+    <tr>
+      <td><code style="font-family:'JetBrains Mono',monospace;color:var(--accent);font-size:12px">${esc(code)}</code></td>
+      <td><span class="badge b-pro">${esc(info.plan)}</span></td>
+      <td>${info.used||0}</td>
+      <td>${info.max_uses||1}</td>
+      <td><button class="btn btn-danger btn-xs" onclick="deleteCode('${esc(code)}')">🗑️</button></td>
+    </tr>`).join('');
+  // Also load plan limits on codes tab
+  const planR = await fetch('/api/admin/plans');
+  if (planR.ok) { plans = await planR.json(); renderPlanLimits('plan-limits-table'); }
+}
+
+async function createCode() {
+  const plan = document.getElementById('code-plan').value;
+  const maxUses = parseInt(document.getElementById('code-uses').value);
+  const r = await apiFetch('/api/admin/create-code', 'POST', {plan, max_uses: maxUses});
+  if (r.ok) {
+    const data = await r.json();
+    currentCode = data.code;
+    document.getElementById('code-val').textContent = currentCode;
+    document.getElementById('code-result').style.display = 'block';
+    toast('✅ Kóði búinn til!', 'ok');
+    loadCodes();
+  } else toast('❌ Villa', 'err');
+}
+
+function copyCode() {
+  if (currentCode) { navigator.clipboard.writeText(currentCode); toast('📋 Afritað!', 'ok'); }
+}
+
+async function deleteCode(code) {
+  const r = await apiFetch(`/api/admin/codes/${encodeURIComponent(code)}`, 'DELETE');
+  if (r.ok) { toast('🗑️ Kóði eyddur', 'ok'); loadCodes(); }
+  else toast('❌ Villa', 'err');
+}
+
+// ─── Dashboard extra charts ───
+function renderDashboardTopUsers() {
+  // handled by loadAnalytics
+}
+
+// ─── Utilities ───
+function set(id, val) { const el = document.getElementById(id); if(el) el.textContent = val; }
+function setCheck(id, val) { const el = document.getElementById(id); if(el) el.checked = val; }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+async function apiFetch(url, method='GET', body=null) {
+  const opts = { method, headers: {'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  return fetch(url, opts);
+}
+
+let toastTimer;
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast ${type}`;
+  el.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.style.display = 'none', 3200);
+}
+
+// ─── Close overlays on click outside ───
+document.querySelectorAll('.overlay').forEach(o => {
+  o.addEventListener('click', e => { if(e.target===o) o.classList.remove('open'); });
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.querySelectorAll('.overlay.open').forEach(o=>o.classList.remove('open'));
+});
+
+// ─── Initial load ───
+loadAll();
+loadAnalytics();
+setInterval(loadAll, 30000);
+
+// iframe height
+function notifyHeight() { try{window.parent.postMessage({type:'iframeHeight',height:document.body.scrollHeight},'*')}catch(e){} }
+new ResizeObserver(notifyHeight).observe(document.body);
+notifyHeight();
+</script>
 </body>
 </html>
