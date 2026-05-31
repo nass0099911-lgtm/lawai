@@ -174,6 +174,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM Elements
     const messageInput = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
+    
+    // Dynamic placeholder for mobile screens
+    if (messageInput) {
+        if (window.innerWidth <= 768) {
+            messageInput.placeholder = "Spyrðu Lögvist...";
+        }
+        window.addEventListener('resize', () => {
+            if (window.innerWidth <= 768) {
+                messageInput.placeholder = "Spyrðu Lögvist...";
+            } else {
+                messageInput.placeholder = "Spyrðu Lögvist um íslensk lög...";
+            }
+        });
+    }
     const stopBtn = document.getElementById('stop-btn');
     const messagesWrapper = document.getElementById('messages-wrapper');
     const welcomeScreen = document.getElementById('welcome-screen');
@@ -1050,21 +1064,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (toggleSidebar && sidebar) {
-        toggleSidebar.addEventListener('click', (e) => {
-            e.stopPropagation();
-            sidebar.classList.toggle('open');
-        });
 
-        // Close sidebar when clicking outside on mobile
-        document.addEventListener('click', (e) => {
-            if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
-                if (!sidebar.contains(e.target) && e.target !== toggleSidebar) {
-                    sidebar.classList.remove('open');
-                }
-            }
-        });
-    }
 
     // Sidebar collapse (desktop)
     const collapseBtn = document.getElementById('sidebar-collapse-btn');
@@ -1207,7 +1207,7 @@ document.addEventListener('DOMContentLoaded', () => {
             sendBtn.disabled = true;
             messageInput.focus();
             if (window.innerWidth <= 768) {
-                sidebar.classList.remove('open');
+                sidebar.classList.remove('active');
             }
             return;
         }
@@ -1245,7 +1245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sendBtn.disabled = true;
 
         if (window.innerWidth <= 768) {
-            sidebar.classList.remove('open');
+            sidebar.classList.remove('active');
         }
         
         const preview = document.querySelector('.preview-panel');
@@ -1468,7 +1468,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (window.innerWidth <= 768) {
-            sidebar.classList.remove('open');
+            sidebar.classList.remove('active');
         }
         
         scrollToBottom();
