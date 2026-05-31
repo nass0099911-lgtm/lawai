@@ -1,0 +1,1 @@
+python -c "import sqlite3; conn=sqlite3.connect('database/aura.db'); cur=conn.cursor(); cur.execute(\"UPDATE users SET is_admin = 1 WHERE username = 'admin01'\"); conn.commit(); conn.close(); print('Admin updated')"

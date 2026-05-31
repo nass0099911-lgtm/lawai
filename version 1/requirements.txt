@@ -1,0 +1,7 @@
+flask
+google-genai
+openai
+groq
+python-dotenv
+werkzeug
+gunicorn
