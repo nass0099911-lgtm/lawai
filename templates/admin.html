@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="is">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stjórnborð - Lögvist</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            height: auto !important;
+            overflow-y: auto !important;
+            display: block !important;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-main, #000000);
+            color: var(--text-primary, #ffffff);
+            margin: 0;
+            padding: 24px;
+            min-height: 100vh;
+        }
+
+        body.in-iframe {
+            background-color: transparent !important;
+            padding: 12px 0 0 0 !important;
+            min-height: auto;
+        }
+
+        body.in-iframe .admin-header {
+            display: none !important;
+        }
+        
+        .admin-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+        }
+        
+        .admin-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--accent-color, #ffffff);
+        }
+        
+        .back-link {
+            color: var(--text-primary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+        
+        .back-link:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .stat-card {
+            background: var(--bg-card, #09090b);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+            text-align: center;
+            transition: all 0.25s ease;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .stat-card:hover {
+            border-color: var(--accent-color, #ffffff);
+            transform: translateY(-2px);
+        }
+        
+        .stat-card h3 {
+            color: var(--text-secondary, #a1a1aa);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 10px;
+        }
+        
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--accent-color, #ffffff);
+        }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            margin-top: 24px;
+            color: var(--text-primary);
+        }
+        
+        .code-creator {
+            background: var(--bg-card, #09090b);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+        }
+        
+        .code-creator h3 {
+            margin-bottom: 16px;
+            font-size: 15px;
+            font-weight: 600;
+        }
+        
+        .code-form {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        
+        .form-group {
+            flex: 1;
+            min-width: 150px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-size: 11px;
+            color: var(--text-secondary, #a1a1aa);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        
+        .form-group select, .form-group input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-surface, #18181b);
+            border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+            border-radius: 8px;
+            color: var(--text-primary, #ffffff);
+            font-size: 13px;
+        }
+        
+        .form-group select:focus, .form-group input:focus {
+            outline: none;
+            border-color: var(--accent-color, #ffffff);
+        }
+        
+        .btn-primary {
+            background: var(--accent-color, #ffffff) !important;
+            color: var(--accent-text-color, #000000) !important;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+        
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
+        .btn-success {
+            background: #10b981;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+        }
+        
+        .generated-code {
+            margin-top: 16px;
+            padding: 16px;
+            background: var(--bg-surface, #18181b);
+            border-radius: 8px;
+            border: 1px solid var(--accent-color, #ffffff);
+            display: none;
+        }
+        
+        .generated-code.show {
+            display: block;
+        }
+        
+        .generated-code code {
+            font-family: monospace;
+            font-size: 15px;
+            color: var(--text-primary);
+            background: rgba(255,255,255,0.06);
+            padding: 4px 8px;
+            border-radius: 4px;
+            word-break: break-all;
+        }
+        
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+            background: var(--bg-card, #09090b);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 12px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+            font-size: 13px;
+        }
+        
+        th {
+            background: var(--bg-surface, #18181b);
+            color: var(--text-secondary, #a1a1aa);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        
+        .plan-select {
+            background: var(--bg-surface, #18181b);
+            color: var(--text-primary, #ffffff);
+            border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            outline: none;
+        }
+        
+        .btn-update {
+            background: var(--accent-color, #ffffff);
+            color: var(--accent-text-color, #000000);
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        
+        .btn-update:hover {
+            opacity: 0.9;
+        }
+        
+        .admin-badge {
+            display: inline-block;
+            background: #10b981;
+            color: white;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        .free-badge {
+            display: inline-block;
+            background: var(--text-muted, #52525b);
+            color: white;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        .pro-badge {
+            display: inline-block;
+            background: #8b5cf6;
+            color: white;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+        
+        .status-message {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            z-index: 1000;
+            transition: opacity 0.3s;
+        }
+        
+        .status-message.success {
+            border-color: #10b981;
+            color: #10b981;
+        }
+        
+        .status-message.error {
+            border-color: #ef4444;
+            color: #ef4444;
+        }
+        
+        .refresh-btn {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 8px;
+            color: var(--text-primary);
+            cursor: pointer;
+            margin-left: 10px;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        
+        .refresh-btn:hover {
+            background: var(--border-color);
+        }
+        
+        .filter-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        
+        .search-input {
+            flex: 1;
+            padding: 8px 14px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-color);
+        }
+        
+        .stats-detail {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+    </style>
+    <script>
+        // Apply parent theme immediately before rendering
+        try {
+            const theme = localStorage.getItem('aura_theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+        } catch(e) { console.error('Failed to load parent theme', e); }
+
+        // Set iframe state on body load
+        if (window.self !== window.top) {
+            document.addEventListener('DOMContentLoaded', () => {
+                document.body.classList.add('in-iframe');
+            });
+        }
+    </script>
+</head>
+<body>
+    <div class="admin-container">
+        <div class="admin-header">
+            <h1>⚖️ Lögvist Stjórnborð</h1>
+            <div>
+                <button class="refresh-btn" onclick="loadData()">🔄 Uppfæra</button>
+                <a href="/" class="back-link">← Aftur á forsíðu</a>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>👥 Heildarfjöldi Notenda</h3>
+                <div class="value" id="stat-users">—</div>
+                <div class="stats-detail" id="stat-users-detail">Notendur í gagnagrunni</div>
+            </div>
+            <div class="stat-card">
+                <h3>💬 Fjöldi Samtala</h3>
+                <div class="value" id="stat-chats">—</div>
+                <div class="stats-detail">Samtöl stofnuð samtals</div>
+            </div>
+            <div class="stat-card">
+                <h3>⭐ Greiddar Áskriftir</h3>
+                <div class="value" id="stat-paid">—</div>
+                <div class="stats-detail" id="stat-paid-detail">Pro áskrifendur</div>
+            </div>
+            <div class="stat-card">
+                <h3>🌐 Heimsóknir á Vefinn</h3>
+                <div class="value" id="stat-visits">—</div>
+                <div class="stats-detail">Veftraffík (heildarflettingar)</div>
+            </div>
+            <div class="stat-card">
+                <h3>🤖 Spurt Gervigreind</h3>
+                <div class="value" id="stat-questions">—</div>
+                <div class="stats-detail">Fyrirspurnir frá notendum</div>
+            </div>
+            <div class="stat-card">
+                <h3>✉️ Skilaboð í Heild</h3>
+                <div class="value" id="stat-messages">—</div>
+                <div class="stats-detail">Heildarskilaboð (notandi + AI)</div>
+            </div>
+        </div>
+
+        <!-- Code Creator -->
+        <div class="code-creator">
+            <h3>🔑 Búa til innlausnarkóða</h3>
+            <div class="code-form">
+                <div class="form-group">
+                    <label>Áskriftarplan</label>
+                    <select id="code-plan">
+                        <option value="pro">⭐ PRO (2.290 ISK/mán)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Fjöldi nota</label>
+                    <input type="number" id="code-max-uses" value="1" min="1" max="100">
+                </div>
+                <button class="btn-primary" id="create-code-btn">✨ Búa til kóða</button>
+            </div>
+            <div id="generated-code" class="generated-code">
+                <strong>✅ Nýr kóði búinn til:</strong><br>
+                <code id="code-value"></code>
+                <div style="margin-top: 12px; display: flex; gap: 10px;">
+                    <button class="btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="copyCode()">📋 Afrita</button>
+                    <button class="btn-success" style="padding: 6px 12px; font-size: 12px;" onclick="downloadCodes()">💾 Vista kóða</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+            <input type="text" id="search-users" class="search-input" placeholder="🔍 Leita að notanda..." onkeyup="filterUsers()">
+            <select id="filter-plan" class="plan-select" onchange="filterUsers()">
+                <option value="all">📋 Allir notendur</option>
+                <option value="free">🎁 Ókeypis</option>
+                <option value="pro">⭐ Pro áskrift</option>
+                <option value="admin">👑 Stjórnendur</option>
+            </select>
+        </div>
+
+        <!-- Users Table -->
+        <h2 class="section-title">📋 Notendastjórnun</h2>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Notendanafn</th>
+                        <th>Skráning</th>
+                        <th>Áskrift</th>
+                        <th>Spurningar eftir</th>
+                        <th>Stjórnandi</th>
+                        <th>Aðgerðir</th>
+                    </tr>
+                </thead>
+                <tbody id="users-table">
+                    <tr><td colspan="6" class="loading">⏳ Hleð gögnum...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Stats Footer -->
+        <div style="margin-top: 24px; padding: 16px; background: #18181b; border-radius: 12px; text-align: center; font-size: 12px; color: #a1a1aa;">
+            <p>📊 Samtals notendur: <span id="footer-total-users">0</span> | 🎁 Ókeypis: <span id="footer-free-users">0</span> | ⭐ Pro: <span id="footer-pro-users">0</span> | 👑 Stjórnendur: <span id="footer-admin-users">0</span></p>
+        </div>
+    </div>
+
+    <div id="status-message" class="status-message" style="display: none;"></div>
+
+    <script>
+        let currentCode = '';
+        let allUsers = [];
+
+        async function loadData() {
+            try {
+                // Load stats
+                const statsRes = await fetch('/api/admin/stats');
+                if (statsRes.ok) {
+                    const stats = await statsRes.json();
+                    document.getElementById('stat-users').textContent = stats.users || 0;
+                    document.getElementById('stat-users-detail').textContent = `Skráðir: ${stats.registered || 0} | Gestir: ${stats.guests || 0}`;
+                    document.getElementById('stat-chats').textContent = stats.chats || 0;
+                    document.getElementById('stat-paid').textContent = stats.paid || 0;
+                    document.getElementById('stat-paid-detail').textContent = `${stats.paid || 0} notendur með Pro`;
+                    
+                    document.getElementById('stat-visits').textContent = stats.visits || 0;
+                    document.getElementById('stat-questions').textContent = stats.questions || 0;
+                    document.getElementById('stat-messages').textContent = stats.messages || 0;
+                }
+
+                // Load users
+                const usersRes = await fetch('/api/admin/users');
+                if (usersRes.ok) {
+                    allUsers = await usersRes.json();
+                    filterUsers();
+                    
+                    // Update footer stats
+                    const freeCount = allUsers.filter(u => u.plan === 'free').length;
+                    const proCount = allUsers.filter(u => u.plan === 'pro').length;
+                    const adminCount = allUsers.filter(u => u.is_admin).length;
+                    
+                    document.getElementById('footer-total-users').textContent = allUsers.length;
+                    document.getElementById('footer-free-users').textContent = freeCount;
+                    document.getElementById('footer-pro-users').textContent = proCount;
+                    document.getElementById('footer-admin-users').textContent = adminCount;
+                } else {
+                    const error = await usersRes.json();
+                    showMessage(`❌ Villa: ${error.error || 'Ekki heimild'}`, 'error');
+                }
+            } catch (err) {
+                console.error('Villa við að sækja gögn:', err);
+                showMessage('❌ Villa við að hlaða gögnum', 'error');
+            }
+        }
+
+        function filterUsers() {
+            const searchTerm = document.getElementById('search-users').value.toLowerCase();
+            const planFilter = document.getElementById('filter-plan').value;
+            
+            let filtered = [...allUsers];
+            
+            // Filter by plan
+            if (planFilter === 'free') {
+                filtered = filtered.filter(u => u.plan === 'free');
+            } else if (planFilter === 'pro') {
+                filtered = filtered.filter(u => u.plan === 'pro');
+            } else if (planFilter === 'admin') {
+                filtered = filtered.filter(u => u.is_admin);
+            }
+            
+            // Filter by search
+            if (searchTerm) {
+                filtered = filtered.filter(u => u.username.toLowerCase().includes(searchTerm));
+            }
+            
+            renderUsersTable(filtered);
+        }
+
+        function renderUsersTable(users) {
+            const tbody = document.getElementById('users-table');
+            
+            if (!users || users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Engir notendur fundnir</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = '';
+            
+            users.forEach(u => {
+                const tr = document.createElement('tr');
+                const joinedDate = u.joined ? new Date(u.joined).toLocaleDateString('is-IS') : 'N/A';
+                
+                let planBadge = '';
+                if (u.plan === 'free') planBadge = '<span class="free-badge">🎁 Ókeypis</span>';
+                else if (u.plan === 'pro') planBadge = '<span class="pro-badge">⭐ Pro</span>';
+                else planBadge = '<span class="free-badge">🎁 Ókeypis</span>';
+                
+                const msgCredits = u.msg_credits === -1 ? '∞' : u.msg_credits;
+                
+                tr.innerHTML = `
+                    <td style="font-weight: 500;">${escapeHtml(u.username)}</td>
+                    <td>${joinedDate}</td>
+                    <td>
+                        <select class="plan-select" id="plan-${escapeHtml(u.username)}" style="width: 100px;">
+                            <option value="free" ${u.plan === 'free' ? 'selected' : ''}>🎁 Ókeypis</option>
+                            <option value="pro" ${u.plan === 'pro' ? 'selected' : ''}>⭐ Pro</option>
+                        </select>
+                        <div style="margin-top: 4px;">${planBadge}</div>
+                    </td>
+                    <td><strong>${msgCredits}</strong> eftir</td>
+                    <td>
+                        <input type="checkbox" id="admin-${escapeHtml(u.username)}" ${u.is_admin ? 'checked' : ''}>
+                        ${u.is_admin ? '<span class="admin-badge" style="margin-left: 8px;">Admin</span>' : ''}
+                    </td>
+                    <td class="action-buttons">
+                        <button class="btn-update" onclick="updateUser('${escapeHtml(u.username)}')">💾 Vista</button>
+                        ${u.plan !== 'pro' ? `<button class="btn-success" onclick="givePro('${escapeHtml(u.username)}')">⭐ Gefa Pro</button>` : ''}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function updateUser(username) {
+            const planSelect = document.getElementById(`plan-${username}`);
+            const adminCheck = document.getElementById(`admin-${username}`);
+            
+            if (!planSelect || !adminCheck) {
+                showMessage('Villa: Fann ekki stillingar fyrir þennan notanda', 'error');
+                return;
+            }
+            
+            const plan = planSelect.value;
+            const isAdmin = adminCheck.checked;
+            
+            try {
+                const res = await fetch(`/api/admin/user/${encodeURIComponent(username)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plan: plan, is_admin: isAdmin })
+                });
+                
+                if (res.ok) {
+                    showMessage(`✅ Upplýsingar fyrir ${username} vistaðar!`, 'success');
+                    loadData(); // Refresh data
+                } else {
+                    const error = await res.json();
+                    showMessage(`❌ Villa: ${error.error || 'Ekki tókst að vista'}`, 'error');
+                }
+            } catch(e) {
+                showMessage('❌ Villa kom upp við vistun', 'error');
+            }
+        }
+
+        async function givePro(username) {
+            try {
+                const res = await fetch(`/api/admin/user/${encodeURIComponent(username)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plan: 'pro', is_admin: false })
+                });
+                
+                if (res.ok) {
+                    showMessage(`✅ ${username} hefur fengið Pro áskrift!`, 'success');
+                    loadData();
+                } else {
+                    showMessage(`❌ Villa við að uppfæra ${username}`, 'error');
+                }
+            } catch(e) {
+                showMessage('❌ Villa kom upp', 'error');
+            }
+        }
+
+        async function createCode() {
+            const plan = document.getElementById('code-plan').value;
+            const maxUses = document.getElementById('code-max-uses').value;
+            
+            try {
+                const res = await fetch('/api/admin/create-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plan: plan, max_uses: parseInt(maxUses) })
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    currentCode = data.code;
+                    document.getElementById('code-value').textContent = currentCode;
+                    document.getElementById('generated-code').classList.add('show');
+                    showMessage(`✅ ${plan.toUpperCase()} kóði búinn til!`, 'success');
+                } else {
+                    const error = await res.json();
+                    showMessage(`❌ Villa: ${error.error || 'Ekki tókst að búa til kóða'}`, 'error');
+                }
+            } catch(e) {
+                showMessage('❌ Villa við að búa til kóða', 'error');
+            }
+        }
+
+        function copyCode() {
+            if (currentCode) {
+                navigator.clipboard.writeText(currentCode);
+                showMessage('📋 Kóði afritaður á klemmuspjald!', 'success');
+            }
+        }
+
+        function downloadCodes() {
+            const codes = [];
+            const codeElements = document.querySelectorAll('.generated-code code');
+            codeElements.forEach(el => {
+                if (el.textContent) codes.push(el.textContent);
+            });
+            
+            if (codes.length === 0 && currentCode) codes.push(currentCode);
+            
+            if (codes.length > 0) {
+                const blob = new Blob([codes.join('\n')], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `logvist_codes_${new Date().toISOString().slice(0,19)}.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showMessage('💾 Kóðar vistaðir!', 'success');
+            } else {
+                showMessage('❌ Engir kóðar til að vista', 'error');
+            }
+        }
+
+        function showMessage(message, type) {
+            const msgDiv = document.getElementById('status-message');
+            msgDiv.textContent = message;
+            msgDiv.className = `status-message ${type}`;
+            msgDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                msgDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+
+        // Event listeners
+        document.getElementById('create-code-btn').addEventListener('click', createCode);
+        
+        // Load data on page load
+        loadData();
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadData, 30000);
+
+        // Notify parent of height for iframe resizing
+        function notifyHeight() {
+            const h = document.body.scrollHeight;
+            try { window.parent.postMessage({ type: 'iframeHeight', height: h }, '*'); } catch(e) {}
+        }
+        const ro = new ResizeObserver(notifyHeight);
+        ro.observe(document.body);
+        notifyHeight();
+    </script>
+</body>
+</html>

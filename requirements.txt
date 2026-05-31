@@ -1,0 +1,11 @@
+flask
+google-genai
+openai
+groq
+python-dotenv
+werkzeug
+gunicorn
+authlib
+requests
+pypdf
+python-docx
